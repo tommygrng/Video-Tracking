@@ -79,6 +79,16 @@ details summary{cursor:pointer;font-weight:600}
 .hist{display:flex;flex-direction:column;gap:6px}
 .hist .h{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;border-top:1px solid var(--line);padding-top:6px;font-size:13px}
 .hist .h small{display:block;color:var(--muted)}
+.seekrow{display:flex;gap:10px;align-items:center}
+.seekrow input{flex:1}
+.opts{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;justify-content:space-between}
+.opts button{min-height:36px;padding:6px 8px;text-decoration:underline}
+details.valid{border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px}
+details.valid[open]{display:flex}
+details.valid summary{margin-bottom:4px}
+#tRef input{width:58px;min-height:36px;padding:4px 6px;text-align:right;font-family:var(--mono)}
+#tRef td{border-top:1px solid var(--line)}
+.dpos{color:var(--good)} .dneg{color:var(--bad)}
 .swatch{display:inline-block;width:16px;height:16px;border-radius:50%;vertical-align:middle;border:1px solid var(--line);margin-right:6px}
 @media (min-width:760px){.big b{font-size:60px}}
 </style>
@@ -102,6 +112,7 @@ details summary{cursor:pointer;font-weight:600}
     <canvas id="ov"></canvas>
     <div class="placeholder" id="ph">Posez le téléphone de profil, à hauteur des disques, à 1,5–3 m de la barre.<br>Suivez un disque de couleur (vert, bleu, rouge, jaune…) ou une pastille vive collée au centre d'un disque noir.</div>
   </div></div>
+  <div class="seekrow" id="seekRow" hidden><span class="note" id="seekT">0,00 s</span><input type="range" id="seek" min="0" max="1" step="0.01" value="0" aria-label="Position dans la vidéo"><span class="note" id="fileName"></span></div>
 
   <div class="hint" id="hint">Touchez « Allumer la caméra ».</div>
 
@@ -118,6 +129,11 @@ details summary{cursor:pointer;font-weight:600}
     <button id="bCalAuto" disabled>Calibrer automatiquement</button>
     <button class="primary" id="bRec" disabled>Démarrer la série</button>
   </div>
+  <div class="opts">
+    <label class="c" for="oVid"><input type="checkbox" id="oVid"> Filmer la série (mode essai, pour comparer à un appareil de référence)</label>
+    <button class="ghost" id="bFile">Analyser une vidéo enregistrée…</button>
+    <input type="file" id="fileIn" accept="video/*" hidden>
+  </div>
 
   <section class="card" id="res" hidden>
     <h2>Résultats de la série</h2>
@@ -129,8 +145,20 @@ details summary{cursor:pointer;font-weight:600}
       <label class="f" for="sEx">Mouvement<input id="sEx" list="exl" placeholder="ex. Back squat"></label>
       <label class="f" for="sLoad">Charge (kg)<input id="sLoad" inputmode="decimal" placeholder="ex. 100"></label>
     </div>
+    <details class="valid" id="validBox">
+      <summary>Valeurs de l'appareil de référence</summary>
+      <p class="note">Saisissez rep par rep les valeurs de votre appareil de référence (capteur linéaire, centrale inertielle…). Laissez vide une ligne si l'appareil n'a pas cette rep, et précisez-le dans le commentaire.</p>
+      <label class="f" for="refDev">Appareil de référence<input id="refDev" placeholder="ex. GymAware, Vitruve, Enode…"></label>
+      <div class="tablebox"><table id="tRef"></table></div>
+      <button class="ghost" id="bRefAdd" style="align-self:flex-start">+ ligne (rep vue seulement par la référence)</button>
+      <p class="note" id="refSum"></p>
+      <label class="f" for="sNote">Commentaire<input id="sNote" placeholder="ex. rep 3 non détectée par la référence, téléphone à 2 m"></label>
+    </details>
     <div class="actions">
       <button class="primary" id="bSave">Enregistrer la série</button>
+      <button id="bTrial">Télécharger l'essai (JSON)</button>
+      <button id="bVid" hidden>Télécharger la vidéo</button>
+      <button id="bShare" hidden>Partager vidéo + essai</button>
       <button id="bRaw">Exporter la trajectoire (CSV)</button>
     </div>
   </section>
@@ -152,6 +180,7 @@ details summary{cursor:pointer;font-weight:600}
         <label class="f" for="oTol">Tolérance couleur<input id="oTol" type="range" min="6" max="40" step="1"></label>
         <label class="f" for="oRes">Résolution d'analyse<select id="oRes"><option value="320">320 px (rapide)</option><option value="480">480 px</option><option value="640">640 px (précis)</option></select></label>
         <label class="f" for="oFps">Images / seconde demandées<select id="oFps"><option value="30">30</option><option value="60">60</option></select></label>
+        <label class="f" for="oRate">Vitesse de lecture pour l'analyse de fichier<select id="oRate"><option value="1">×1</option><option value="0.5">×0,5</option><option value="0.25">×0,25 (vidéos 120 i/s)</option></select></label>
         <label class="f" for="oStop">Arrêt auto sans mouvement (s)<input id="oStop" inputmode="numeric"></label>
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px">
@@ -188,7 +217,7 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;
 const num = v => { const x = parseFloat(String(v ?? '').replace(',', '.')); return isFinite(x) ? x : NaN; };
 
 /* ---------- réglages persistants ---------- */
-const DEF = {obj:'auto', diam:45, mark:5, rom:15, tol:22, res:480, fps:60, stop:6, beep:true, mask:false, target:null, mPerPx:null, calMode:null};
+const DEF = {vid:false, fileRate:0.25, refDev:'', obj:'auto', diam:45, mark:5, rom:15, tol:22, res:480, fps:60, stop:6, beep:true, mask:false, target:null, mPerPx:null, calMode:null};
 const O = {...DEF};
 let HIST = [];
 try{ Object.assign(O, JSON.parse(localStorage.getItem(LS + '-opt') || '{}')); HIST = JSON.parse(localStorage.getItem(LS + '-hist') || '[]'); }catch(e){}
@@ -196,28 +225,32 @@ const saveO = () => { try{ localStorage.setItem(LS + '-opt', JSON.stringify(O));
 const saveH = () => { try{ localStorage.setItem(LS + '-hist', JSON.stringify(HIST)); }catch(e){ setStatus('Stockage plein : exportez puis videz l\'historique'); } };
 
 /* ---------- état ---------- */
-const S = { stream:null, track:null, vw:0, vh:0, stage:'off', calPts:[], areas:[], samples:[], rec:false, t0:null,
+const S = { src:null, vidRec:null, vidChunks:[], vidBlob:null, vidMime:'', vidStartPerf:0, firstPerf:null, lastMT:-1, ref:[], savedId:null, stream:null, track:null, vw:0, vh:0, stage:'off', calPts:[], areas:[], samples:[], rec:false, t0:null,
   last:null, blobR:4, lostN:0, frames:0, fpsT:[], lastAnalysis:null, repsSeen:0, lastMoveT:0, wake:null, audio:null, maskImg:null, res:null };
 const video = $('#video'), ov = $('#ov'), octx = ov.getContext('2d');
 const proc = document.createElement('canvas'), pctx = proc.getContext('2d', {willReadFrequently:true});
 
+const active = () => !!(S.stream || S.src === 'file');
 function setStatus(t){ $('#status').textContent = t; }
 function hint(t){ $('#hint').innerHTML = t; }
 function steps(){
   const done = {cam: !!S.stream, pick: !!O.target, calib: !!O.mPerPx, rec: !!S.res};
   document.querySelectorAll('.step').forEach(el => { const k = el.dataset.st; el.classList.toggle('ok', !!done[k]); el.classList.toggle('on', S.stage === k || (S.stage.startsWith('cal') && k === 'calib')); });
-  $('#bPick').disabled = !S.stream || S.rec; $('#bCal').disabled = !S.stream || S.rec; $('#bCalAuto').disabled = !S.stream || !O.target || S.rec;
-  $('#bRec').disabled = !S.stream || !O.target || !O.mPerPx;
-  $('#bRec').textContent = S.rec ? 'Arrêter la série' : 'Démarrer la série'; $('#bRec').className = S.rec ? 'rec' : 'primary';
-  $('#bCam').textContent = S.stream ? 'Éteindre la caméra' : 'Allumer la caméra'; $('#bCam').className = S.stream ? '' : 'primary';
+  $('#bPick').disabled = !active() || S.rec; $('#bCal').disabled = !active() || S.rec; $('#bCalAuto').disabled = !active() || !O.target || S.rec;
+  $('#bRec').disabled = !active() || !O.target || !O.mPerPx;
+  const isFile = S.src === 'file';
+  $('#bRec').textContent = S.rec ? (isFile ? 'Arrêter l\'analyse' : 'Arrêter la série') : (isFile ? 'Analyser la vidéo' : 'Démarrer la série'); $('#bRec').className = S.rec ? 'rec' : 'primary';
+  $('#seekRow').hidden = !isFile; $('#seek').disabled = S.rec; $('#oVid').disabled = isFile || S.rec;
+  $('#bCam').textContent = S.stream ? 'Éteindre la caméra' : (isFile ? 'Revenir à la caméra' : 'Allumer la caméra'); $('#bCam').className = S.stream ? '' : 'primary';
   $('#calInfo').innerHTML = O.mPerPx ? `Calibrage actuel : ${fmt(O.mPerPx*1000, 3)} mm par pixel vidéo (${O.calMode === 'plate' ? 'touches sur le disque' : O.calMode === 'plate-auto' ? 'disque suivi, automatique' : 'sur la pastille'}).` : 'Pas encore de calibrage.';
 }
 
 /* ---------- caméra ---------- */
 async function startCam(){
+  if (S.src === 'file') closeFile();
   try{
     const st = await navigator.mediaDevices.getUserMedia({audio:false, video:{facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720}, frameRate:{ideal:+O.fps}}});
-    S.stream = st; S.track = st.getVideoTracks()[0]; video.srcObject = st; await video.play();
+    S.stream = st; S.src = 'cam'; S.track = st.getVideoTracks()[0]; video.srcObject = st; await video.play();
     await new Promise(r => video.videoWidth ? r() : video.addEventListener('loadedmetadata', r, {once:true}));
     S.vw = video.videoWidth; S.vh = video.videoHeight;
     $('#stage').style.aspectRatio = `${S.vw}/${S.vh}`; fitStage(); $('#ph').hidden = true;
@@ -236,7 +269,7 @@ async function startCam(){
 function stopCam(){
   if (S.rec) stopRec();
   if (S.stream) S.stream.getTracks().forEach(t => t.stop());
-  S.stream = null; S.track = null; video.srcObject = null; $('#ph').hidden = false; S.stage = 'off';
+  S.stream = null; S.src = null; S.track = null; video.srcObject = null; $('#ph').hidden = false; S.stage = 'off';
   try{ S.wake && S.wake.release(); }catch(e){} S.wake = null;
   octx.clearRect(0, 0, ov.width, ov.height); setStatus('Caméra éteinte'); hint('Touchez « Allumer la caméra ».'); steps();
 }
@@ -268,8 +301,11 @@ function matcher(){
 /* ---------- boucle de suivi ---------- */
 let rvfc = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
 function loop(){
-  if (!S.stream) return;
-  const step = (now, meta) => { if (!S.stream) return; frame(meta && meta.mediaTime != null ? meta.mediaTime : performance.now()/1000); schedule(); };
+  if (!active()) return;
+  const step = (now, meta) => { if (!active()) return;
+    if (S.src === 'file'){ const mt = meta && meta.mediaTime != null ? meta.mediaTime : video.currentTime; if (mt !== S.lastMT){ S.lastMT = mt; frame(mt); } }
+    else frame(meta && meta.mediaTime != null ? meta.mediaTime : performance.now()/1000);
+    schedule(); };
   const schedule = () => rvfc ? video.requestVideoFrameCallback(step) : requestAnimationFrame(t => step(t, null));
   schedule();
 }
@@ -286,8 +322,8 @@ function frame(t){
     const s = {t, x: det.x * kx, y: det.y * kx, a: det.n * kx * kx};
     S.isPlate = O.obj === 'plate' || (O.obj === 'auto' && det.big);
     if (S.stage === 'calauto'){ S.areas.push({a: s.a, ext: det.ext * kx}); if (S.areas.length >= 20) finishAutoCal(); }
-    if (S.rec){ if (S.t0 == null) S.t0 = t; S.samples.push({t: t - S.t0, x: s.x, y: s.y, a: s.a, e: det.ext * kx}); }
-  } else if (S.rec){ if (S.t0 == null) S.t0 = t; S.samples.push({t: t - S.t0, x: NaN, y: NaN, a: NaN}); }
+    if (S.rec){ if (S.t0 == null){ S.t0 = t; S.firstPerf = performance.now(); } S.samples.push({t: t - S.t0, x: s.x, y: s.y, a: s.a, e: det.ext * kx}); }
+  } else if (S.rec){ if (S.t0 == null){ S.t0 = t; S.firstPerf = performance.now(); } S.samples.push({t: t - S.t0, x: NaN, y: NaN, a: NaN}); }
   S.frames++;
   if (S.rec && S.frames % 6 === 0) liveUpdate();
   draw(det, kx);
@@ -341,7 +377,7 @@ function draw(det, kx){
 
 /* ---------- interactions sur l'image ---------- */
 ov.addEventListener('pointerdown', ev => {
-  if (!S.stream) return;
+  if (!active()) return;
   const r = ov.getBoundingClientRect(); const fx = (ev.clientX - r.left) / r.width, fy = (ev.clientY - r.top) / r.height;
   const vx = fx * S.vw, vy = fy * S.vh;
   if (S.stage === 'pick'){
@@ -380,12 +416,29 @@ function finishAutoCal(){
 function beep(f = 880, d = 0.07){
   if (!O.beep) return; try{ const A = S.audio || (S.audio = new (window.AudioContext || window.webkitAudioContext)()); const o = A.createOscillator(), g = A.createGain();
     o.frequency.value = f; g.gain.value = 0.15; o.connect(g); g.connect(A.destination); o.start(); o.stop(A.currentTime + d); }catch(e){} }
-function startRec(){
+const pickMime = () => !window.MediaRecorder ? '' : (['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m)) || '');
+function startVideoRec(){
+  S.vidBlob = null; S.vidChunks = []; $('#bVid').hidden = true; $('#bShare').hidden = true;
+  if (!O.vid || S.src !== 'cam' || !window.MediaRecorder) return;
+  try{ S.vidMime = pickMime(); const r = new MediaRecorder(S.stream, S.vidMime ? {mimeType: S.vidMime, videoBitsPerSecond: 8e6} : {videoBitsPerSecond: 8e6});
+    r.ondataavailable = e => { if (e.data && e.data.size) S.vidChunks.push(e.data); };
+    r.onstop = () => { S.vidBlob = new Blob(S.vidChunks, {type: r.mimeType || S.vidMime || 'video/webm'}); S.vidMime = S.vidBlob.type; $('#bVid').hidden = false; updateShare(); setStatus(`Vidéo prête (${fmt(S.vidBlob.size / 1e6, 1)} Mo)`); };
+    r.start(1000); S.vidRec = r; S.vidStartPerf = performance.now();
+  }catch(e){ S.vidRec = null; setStatus('Enregistrement vidéo impossible sur ce navigateur'); }
+}
+async function startRec(){
+  S.firstPerf = null; S.ref = []; S.savedId = null;
+  if (S.src === 'file'){ S.last = null; S.lostN = 99; S.lastMT = -1; video.pause(); video.currentTime = 0; await new Promise(r => video.addEventListener('seeked', r, {once:true}));
+    video.playbackRate = +O.fileRate || 0.25; try{ const q = video.getVideoPlaybackQuality(); S.vq0 = q.totalVideoFrames; }catch(e){ S.vq0 = null; } }
   S.samples = []; S.t0 = null; S.rec = true; S.repsSeen = 0; S.lastMoveT = 0; S.res = null; $('#res').hidden = true;
   $('#mReps').textContent = '0'; $('#mV').textContent = '–'; $('#mVL').textContent = '–'; $('#mVL').classList.remove('bad');
-  beep(660, 0.12); hint('Mesure en cours… Faites vos reps. La série s\'arrête seule après ' + O.stop + ' s sans mouvement, ou touchez « Arrêter la série ».'); steps();
+  if (S.src === 'file'){ hint('Analyse de la vidéo image par image… (lecture ralentie pour ne perdre aucune image)'); steps(); video.play(); return; }
+  startVideoRec();
+  beep(660, 0.12); hint('Mesure en cours… Faites vos reps. La série s\'arrête seule après ' + O.stop + ' s sans mouvement, ou touchez « Arrêter la série ».' + (S.vidRec ? ' <b>Vidéo en cours d\'enregistrement.</b>' : '')); steps();
 }
 function stopRec(){
+  if (S.vidRec && S.vidRec.state !== 'inactive'){ try{ S.vidRec.stop(); }catch(e){} } S.vidRec = null;
+  if (S.src === 'file'){ video.pause(); video.playbackRate = 1; try{ S.fileFrames = S.vq0 != null ? video.getVideoPlaybackQuality().totalVideoFrames - S.vq0 : null; }catch(e){ S.fileFrames = null; } }
   S.rec = false; const res = analyze(S.samples, O.mPerPx, num(O.rom) / 100); S.res = res; beep(440, 0.2);
   showResults(res); hint(res.reps.length ? `${res.reps.length} rep${res.reps.length > 1 ? 's' : ''} détectée${res.reps.length > 1 ? 's' : ''}. Renseignez le mouvement et la charge, puis enregistrez.` : 'Aucune rep détectée : vérifiez que la pastille est suivie pendant tout le mouvement et que l\'amplitude minimale n\'est pas trop élevée.'); steps();
 }
@@ -397,7 +450,7 @@ function liveUpdate(){
   if (n){ const last = res.reps[n - 1]; $('#mV').textContent = fmt(last.mcv); $('#mVL').textContent = res.vl != null ? Math.round(res.vl) + '%' : '–'; $('#mVL').classList.toggle('bad', res.vl >= 20); }
   const tNow = S.samples.length ? S.samples[S.samples.length - 1].t : 0;
   if (res.lastMove != null) S.lastMoveT = res.lastMove;
-  if (n && tNow - S.lastMoveT > num(O.stop)) stopRec();
+  if (S.src === 'cam' && n && tNow - S.lastMoveT > num(O.stop)) stopRec();
   const fps = S.fpsT.length > 2 ? (S.fpsT.length - 1) / (S.fpsT[S.fpsT.length - 1] - S.fpsT[0]) : 0; setStatus(`${Math.round(fps)} i/s · ${fmt(tNow, 1)} s`);
 }
 
@@ -468,12 +521,28 @@ function showResults(res){
   if (q.fps && q.fps < 25) warns.push(`Seulement ${Math.round(q.fps)} images/s : vitesses maximales peu fiables.`);
   if (q.lostPct > 10) warns.push(`Cible perdue sur ${Math.round(q.lostPct)} % des images : améliorez l'éclairage ou la tolérance couleur.`);
   if (q.sizeVar > 15) warns.push(`La taille apparente de la cible a varié de ${Math.round(q.sizeVar)} % : la barre s'est probablement rapprochée ou éloignée du téléphone, les mesures sont faussées.`);
+  if (S.src === 'file' && S.fileFrames && S.samples.length < 0.9 * S.fileFrames) warns.push(`${S.samples.length} images analysées sur ${S.fileFrames} décodées : des images ont été sautées. Relancez l'analyse avec une lecture plus lente (Réglages › Vitesse de lecture).`);
   const excl = (res.excluded || []).map(r => `Mouvement à ${fmt(r.t0, 1)} s non compté (${fmt(r.rom * 100, 0)} cm) : ${r.why}.`);
   $('#quality').innerHTML = `<p class="note">${fmt(q.dur, 1)} s enregistrées · ${Math.round(q.fps)} images/s · cible suivie sur ${Math.round(100 - q.lostPct)} % des images.</p>` + excl.map(w => `<p class="note">${esc(w)}</p>`).join('') + warns.map(w => `<p class="warn">${esc(w)}</p>`).join('');
   const best = R.length ? Math.max(...R.map(r => r.mcv)) : 0;
   $('#tReps').innerHTML = R.length ? `<thead><tr><th>Rep</th><th>Ampl. cm</th><th>V moy m/s</th><th>V max m/s</th><th>Montée s</th><th>Perte</th></tr></thead><tbody>${R.map(r => `<tr class="${r.mcv === best ? 'best' : ''}"><td>${r.n}</td><td>${fmt(r.rom * 100, 1)}</td><td>${fmt(r.mcv)}</td><td>${fmt(r.vpk)}</td><td>${fmt(r.dur)}</td><td>${best ? Math.round((best - r.mcv) / best * 100) + ' %' : ''}</td></tr>`).join('')}</tbody>` : '';
-  drawV(R); drawP(res);
+  drawV(R); drawP(res); renderRef();
 }
+/* ---------- valeurs de référence ---------- */
+function renderRef(){
+  const R = (S.res && S.res.reps) || []; const n = Math.max(R.length, S.ref.length);
+  $('#tRef').innerHTML = n ? `<thead><tr><th>Rep</th><th>Appli</th><th>Réf V moy</th><th>Réf V max</th><th>Réf cm</th><th>Écart</th></tr></thead><tbody>${Array.from({length: n}, (_, i) => { const r = R[i], f = S.ref[i] || {};
+    return `<tr><td>${i + 1}</td><td>${r ? fmt(r.mcv) : '–'}</td>${['mcv', 'vpk', 'rom'].map(k => `<td><input id="ref-${k}-${i}" data-ref="${i}" data-k="${k}" inputmode="decimal" value="${esc(f[k] ?? '')}" aria-label="Référence ${k} rep ${i + 1}"></td>`).join('')}<td class="dcell" id="refd-${i}"></td></tr>`; }).join('')}</tbody>` : '';
+  $('#refDev').value = O.refDev || ''; updateRefDiff();
+}
+function updateRefDiff(){
+  const R = (S.res && S.res.reps) || []; const d = [];
+  S.ref.forEach((f, i) => { const el = $('#refd-' + i); if (!el) return; const v = num(f && f.mcv); if (R[i] && isFinite(v) && v > 0){ const p = (R[i].mcv - v) / v * 100; d.push(p); el.innerHTML = `<span class="${Math.abs(p) <= 5 ? 'dpos' : 'dneg'}">${p > 0 ? '+' : ''}${fmt(p, 1)} %</span>`; } else el.textContent = ''; });
+  $('#refSum').textContent = d.length ? `Écart moyen sur la vitesse moyenne : ${fmt(d.reduce((a, b) => a + b, 0) / d.length, 1)} % (biais) · écart absolu moyen ${fmt(d.reduce((a, b) => a + Math.abs(b), 0) / d.length, 1)} % sur ${d.length} rep${d.length > 1 ? 's' : ''}.` : '';
+}
+$('#tRef').addEventListener('input', e => { const t = e.target; if (t.dataset.ref == null) return; const i = +t.dataset.ref; S.ref[i] = S.ref[i] || {}; S.ref[i][t.dataset.k] = t.value; updateRefDiff(); });
+$('#bRefAdd').addEventListener('click', e => { { S.ref.length = Math.max(S.ref.length, ((S.res && S.res.reps) || []).length) + 1; for (let i = 0; i < S.ref.length; i++) S.ref[i] = S.ref[i] || {}; renderRef(); } });
+$('#refDev').addEventListener('input', e => { O.refDev = e.target.value; saveO(); });
 function drawV(R){
   const el = $('#cV'); if (!R.length){ el.innerHTML = ''; return; }
   const W = Math.max(300, el.clientWidth || 600), H = 170, m = {l: 40, r: 10, t: 16, b: 24}, pw = W - m.l - m.r, ph = H - m.t - m.b;
@@ -506,8 +575,8 @@ function download(name, text){ const a = document.createElement('a'); a.href = U
 const dec = v => (v == null || !isFinite(v)) ? '' : String(Math.round(v * 1000) / 1000).replace('.', ',');
 function exportHist(){
   if (!HIST.length){ setStatus('Historique vide'); return; }
-  const L = [['Date','Heure','Mouvement','Charge kg','Rep','Amplitude cm','V moy concentrique m/s','V max m/s','Durée montée s','Temps au pic s','V moy excentrique m/s','Perte vs meilleure %','Perte série %','Images/s','Pastille perdue %','Variation taille pastille %','Calibrage'].join(';')];
-  HIST.forEach(h => { const best = Math.max(...h.reps.map(r => r.mcv)); h.reps.forEach(r => L.push([h.date, h.time || '', h.ex, String(h.load || '').replace('.', ','), r.n, dec(r.rom * 100), dec(r.mcv), dec(r.vpk), dec(r.dur), dec(r.tpk), r.ecc ? dec(r.ecc.mv) : '', dec((best - r.mcv) / best * 100), dec(h.vl), dec(h.q.fps), dec(h.q.lostPct), dec(h.q.sizeVar), h.cal].map(v => /[;"\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v).join(';'))); });
+  const L = [['Date','Heure','Mouvement','Charge kg','Rep','Amplitude cm','V moy concentrique m/s','V max m/s','Durée montée s','Temps au pic s','V moy excentrique m/s','Perte vs meilleure %','Perte série %','Images/s','Cible perdue %','Variation taille cible %','Calibrage','Source','Réf appareil','Réf V moy m/s','Réf V max m/s','Réf amplitude cm','Écart V moy %','Commentaire'].join(';')];
+  HIST.forEach(h => { const best = Math.max(...h.reps.map(r => r.mcv)); h.reps.forEach(r => L.push([h.date, h.time || '', h.ex, String(h.load || '').replace('.', ','), r.n, dec(r.rom * 100), dec(r.mcv), dec(r.vpk), dec(r.dur), dec(r.tpk), r.ecc ? dec(r.ecc.mv) : '', dec((best - r.mcv) / best * 100), dec(h.vl), dec(h.q.fps), dec(h.q.lostPct), dec(h.q.sizeVar), h.cal, h.src || '', h.refDev || '', ...(f => [dec(f.mcv), dec(f.vpk), dec(f.rom), isFinite(f.mcv) && f.mcv > 0 ? dec((r.mcv - f.mcv) / f.mcv * 100) : ''])((h.ref || [])[r.n - 1] || {}), h.note || ''].map(v => /[;"\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v).join(';'))); });
   download(`vitesse-barre_${today()}.csv`, L.join('\r\n'));
 }
 function exportRaw(){
@@ -516,18 +585,68 @@ function exportRaw(){
   download(`trajectoire_${today()}.csv`, L.join('\r\n'));
 }
 
+/* ---------- paquet d'essai ---------- */
+const slug = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
+function trialStem(){ const d = new Date(); return `essai_${today()}_${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}${$('#sEx').value ? '_' + slug($('#sEx').value) : ''}${$('#sLoad').value ? '_' + slug($('#sLoad').value) + 'kg' : ''}`; }
+function trialJSON(){
+  const res = S.res || {}; const set = S.track && S.track.getSettings ? S.track.getSettings() : {};
+  return {format: 'vitesse-barre-essai', version: 1, created: new Date().toISOString(), userAgent: navigator.userAgent,
+    source: S.src === 'file' ? {type: 'fichier', name: S.fileName || ''} : {type: 'camera', mime: S.vidMime || null, video_offset_s: S.firstPerf && S.vidStartPerf ? (S.firstPerf - S.vidStartPerf) / 1000 : null},
+    video: {width: S.vw, height: S.vh, camera_fps_setting: set.frameRate || null},
+    exercise: $('#sEx').value.trim(), load_kg: $('#sLoad').value.trim(), comment: $('#sNote').value.trim(),
+    settings: {obj: O.obj, diam_cm: num(O.diam), marker_cm: num(O.mark), min_rom_cm: num(O.rom), tol_hue: +O.tol, analysis_width_px: +O.res, file_rate: +O.fileRate || 0.5},
+    target: O.target, calibration: {mode: O.calMode, m_per_px: O.mPerPx},
+    samples: S.samples.map(p => [Math.round(p.t * 1e4) / 1e4, isFinite(p.x) ? Math.round(p.x * 10) / 10 : null, isFinite(p.y) ? Math.round(p.y * 10) / 10 : null, isFinite(p.a) ? Math.round(p.a) : null, isFinite(p.e) ? Math.round(p.e * 10) / 10 : null]),
+    samples_columns: ['t_s', 'x_px', 'y_px', 'aire_px2', 'hauteur_cible_px'],
+    results: {reps: (res.reps || []).map(r => ({n: r.n, t0: r.t0, t1: r.t1, rom_m: r.rom, mcv: r.mcv, vpk: r.vpk, t_pic_s: r.tpk, dur_s: r.dur, ecc: r.ecc, drift_m: r.drift})),
+      excluded: (res.excluded || []).map(r => ({t0: r.t0, rom_m: r.rom, why: r.why})), vl_pct: res.vl, quality: res.quality},
+    reference: {device: O.refDev || '', reps: S.ref.map((f, i) => ({rep: i + 1, mcv: num(f && f.mcv), vpk: num(f && f.vpk), rom_cm: num(f && f.rom)}))}};
+}
+function dlBlob(name, blob){ const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000); }
+const vidExt = () => /mp4/.test(S.vidMime) ? 'mp4' : 'webm';
+function trialFiles(){ const stem = trialStem(); const files = [new File([JSON.stringify(trialJSON())], stem + '.json', {type: 'application/json'})];
+  if (S.vidBlob) files.unshift(new File([S.vidBlob], stem + '.' + vidExt(), {type: S.vidBlob.type})); return files; }
+function updateShare(){ try{ $('#bShare').hidden = !(navigator.canShare && S.res && navigator.canShare({files: trialFiles()})); }catch(e){ $('#bShare').hidden = true; } }
+$('#bTrial').addEventListener('click', () => { if (!S.res){ setStatus('Pas de série à exporter'); return; } dlBlob(trialStem() + '.json', new Blob([JSON.stringify(trialJSON(), null, 1)], {type: 'application/json'})); setStatus('Essai téléchargé'); });
+$('#bVid').addEventListener('click', () => { if (!S.vidBlob) return; dlBlob(trialStem() + '.' + vidExt(), S.vidBlob); });
+$('#bShare').addEventListener('click', async () => { try{ await navigator.share({files: trialFiles(), title: 'Essai Vitesse Barre'}); }catch(e){ if (e && e.name !== 'AbortError') setStatus('Partage impossible : utilisez les boutons de téléchargement'); } });
+
+/* ---------- analyse d'un fichier vidéo ---------- */
+function closeFile(){ if (S.src !== 'file') return; video.pause(); if (S.fileURL) URL.revokeObjectURL(S.fileURL); video.removeAttribute('src'); video.load(); S.src = null; S.fileURL = null; }
+$('#bFile').addEventListener('click', () => $('#fileIn').click());
+$('#fileIn').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  if (S.stream) stopCam(); closeFile();
+  S.fileURL = URL.createObjectURL(f); S.fileName = f.name; video.srcObject = null; video.muted = true; video.loop = false; video.src = S.fileURL;
+  try{ await new Promise((ok, ko) => { video.addEventListener('loadeddata', ok, {once:true}); video.addEventListener('error', ko, {once:true}); }); }
+  catch(err){ hint('Impossible de lire cette vidéo dans le navigateur (format non pris en charge). Essayez une vidéo MP4 (H.264).'); return; }
+  video.pause(); S.src = 'file'; S.vw = video.videoWidth; S.vh = video.videoHeight; S.last = null; S.lostN = 99; S.res = null; $('#res').hidden = true;
+  $('#stage').style.aspectRatio = `${S.vw}/${S.vh}`; fitStage(); $('#ph').hidden = true;
+  $('#seek').max = video.duration || 1; $('#seek').value = 0; $('#fileName').textContent = f.name; S.vidBlob = null;
+  S.stage = O.target ? (O.mPerPx ? 'rec' : 'calib') : 'pick';
+  setStatus(`${S.vw}×${S.vh} · ${fmt(video.duration, 1)} s`);
+  hint('Vidéo chargée. Avec le curseur, placez-vous sur une image où la barre est immobile, puis <b>Cibler la couleur</b> et <b>calibrez</b> (la calibration précédente est conservée si le cadrage est le même). Ensuite « Analyser la vidéo ».');
+  loop(); steps(); video.currentTime = 0.05;
+});
+$('#seek').addEventListener('input', e => { if (S.src !== 'file' || S.rec) return; video.currentTime = +e.target.value; });
+video.addEventListener('seeked', () => { if (S.src === 'file' && !S.rec){ $('#seekT').textContent = fmt(video.currentTime, 2) + ' s'; S.lastMT = -1; S.last = null; S.lostN = 99; frame(video.currentTime); } });
+video.addEventListener('timeupdate', () => { if (S.src === 'file'){ $('#seekT').textContent = fmt(video.currentTime, 2) + ' s'; if (!S.rec) $('#seek').value = video.currentTime; else setStatus(`Analyse : ${Math.round(video.currentTime / (video.duration || 1) * 100)} %`); } });
+video.addEventListener('ended', () => { if (S.src === 'file' && S.rec) stopRec(); });
+
 /* ---------- liaisons ---------- */
 $('#bCam').addEventListener('click', () => S.stream ? stopCam() : startCam());
 $('#bPick').addEventListener('click', () => { S.stage = 'pick'; S.last = null; hint('Touchez la <b>pastille</b> sur l\'image.'); steps(); });
 $('#bCal').addEventListener('click', () => { S.stage = 'cal1'; S.calPts = []; hint(`Touchez le <b>bord haut</b> du disque (diamètre réglé : ${fmt(num(O.diam), 0)} cm, modifiable dans les réglages).`); steps(); });
-$('#bCalAuto').addEventListener('click', () => { S.stage = 'calauto'; S.areas = []; hint(S.isPlate ? `Mesure du disque suivi (${fmt(num(O.diam), 0)} cm) : gardez la barre immobile une seconde…` : `Mesure de la pastille (${fmt(num(O.mark), 1)} cm) : gardez la barre immobile une seconde…`); steps(); });
+$('#bCalAuto').addEventListener('click', () => { S.stage = 'calauto'; S.areas = [];
+  if (S.src === 'file' && video.paused){ for (let i = 0; i < 20 && S.stage === 'calauto'; i++) frame(video.currentTime); return; } hint(S.isPlate ? `Mesure du disque suivi (${fmt(num(O.diam), 0)} cm) : gardez la barre immobile une seconde…` : `Mesure de la pastille (${fmt(num(O.mark), 1)} cm) : gardez la barre immobile une seconde…`); steps(); });
 $('#bRec').addEventListener('click', () => { if (S.rec) stopRec(); else startRec(); });
 $('#bSave').addEventListener('click', () => {
   if (!S.res || !S.res.reps.length){ setStatus('Aucune rep à enregistrer'); return; }
-  const d = new Date(); const h = {id: 'h' + Date.now().toString(36), date: today(), time: `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`,
+  const d = new Date(); const h = {id: S.savedId || 'h' + Date.now().toString(36), date: today(), time: `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`,
     ex: $('#sEx').value.trim(), load: $('#sLoad').value.trim(), reps: S.res.reps.map(r => ({n: r.n, rom: r.rom, mcv: r.mcv, vpk: r.vpk, dur: r.dur, tpk: r.tpk, ecc: r.ecc})),
+    ref: S.ref.map(f => ({mcv: num(f && f.mcv), vpk: num(f && f.vpk), rom: num(f && f.rom)})), refDev: O.refDev || '', note: $('#sNote').value.trim(), src: S.src === 'file' ? S.fileName : 'caméra',
     vl: S.res.vl, q: S.res.quality, cal: O.calMode === 'plate' ? `disque ${O.diam} cm (touches)` : O.calMode === 'plate-auto' ? `disque ${O.diam} cm (auto)` : `pastille ${O.mark} cm`};
-  HIST.push(h); if (HIST.length > 500) HIST.shift(); saveH(); renderHist(); setStatus('Série enregistrée'); $('#bSave').disabled = true; setTimeout(() => $('#bSave').disabled = false, 1500);
+  const ix = HIST.findIndex(x => x.id === h.id); if (ix >= 0) HIST[ix] = h; else HIST.push(h); S.savedId = h.id; if (HIST.length > 500) HIST.shift(); saveH(); renderHist(); setStatus(ix >= 0 ? 'Série mise à jour' : 'Série enregistrée'); $('#bSave').disabled = true; setTimeout(() => $('#bSave').disabled = false, 1500);
   try{ localStorage.setItem(LS + '-ex', h.ex); }catch(e){}
 });
 $('#bRaw').addEventListener('click', exportRaw);
@@ -540,12 +659,12 @@ const bind = (id, key, conv = v => v) => { const el = $(id); if (el.type === 'ch
     if (key === 'diam' || key === 'mark'){ O.mPerPx = null; saveO(); hint('Dimension modifiée : refaites le calibrage.'); steps(); }
     if (key === 'torch') applyTorch(); if (key === 'res') S.last = null; if (key === 'fps' && S.stream){ stopCam(); startCam(); } }); };
 bind('#oObj', 'obj'); bind('#oDiam', 'diam'); bind('#oMark', 'mark'); bind('#oRom', 'rom'); bind('#oTol', 'tol'); bind('#oRes', 'res'); bind('#oFps', 'fps'); bind('#oStop', 'stop');
-bind('#oBeep', 'beep'); bind('#oMask', 'mask'); bind('#oTorch', 'torch');
+bind('#oBeep', 'beep'); bind('#oVid', 'vid'); bind('#oRate', 'fileRate'); bind('#oMask', 'mask'); bind('#oTorch', 'torch');
 try{ $('#sEx').value = localStorage.getItem(LS + '-ex') || ''; }catch(e){}
 document.addEventListener('visibilitychange', async () => { if (document.visibilityState === 'visible' && S.stream && !S.wake){ try{ S.wake = await navigator.wakeLock.request('screen'); }catch(e){} } else if (document.visibilityState === 'hidden') S.wake = null; });
 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ hint('Ce navigateur ne donne pas accès à la caméra. Ouvrez l\'appli en https dans Safari (iPhone) ou Chrome (Android).'); $('#bCam').disabled = true; }
 renderHist(); steps();
-window.__vb = {analyze, S, O}; // accès pour les tests
+window.__vb = {analyze, S, O, trialJSON}; // accès pour les tests
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
 </script>

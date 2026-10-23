@@ -18,10 +18,14 @@ L'accès à la caméra exige une adresse https : GitHub Pages la fournit.
 - À la première ouverture, autoriser l'accès à la caméra.
 
 ## Utilisation au rack
-1. Coller une pastille ronde de couleur vive (rose, vert ou orange fluo, 4 à 6 cm) au centre du disque extérieur.
+1. Choisir la cible :
+   - **disque de couleur** (bumper vert, bleu, rouge, jaune) : aucune préparation, l'appli suit le disque entier ;
+   - **disques noirs ou gris** : coller une pastille ronde de couleur vive (rose, vert ou orange fluo, 4 à 6 cm) au centre du disque extérieur.
 2. Poser le téléphone fixe, de profil, objectif à hauteur des disques, à 1,5 à 3 m. Le trajet complet de la barre doit rester dans l'image.
-3. Allumer la caméra, puis « Cibler la pastille » et toucher la pastille à l'écran.
-4. « Calibrer sur le disque » : toucher le bord haut puis le bord bas du disque. Le diamètre est réglé à 45 cm par défaut.
+3. Allumer la caméra, puis « Cibler la couleur » et toucher le disque (ou la pastille) à l'écran. Un cercle bleu doit le suivre.
+4. Calibrer :
+   - **disque suivi** : « Calibrer automatiquement », barre immobile une seconde ; le diamètre est réglé à 45 cm par défaut ;
+   - **pastille** : « Calibrer sur le disque », puis toucher le bord haut et le bord bas du disque.
 5. « Démarrer la série ». Un bip retentit à chaque rep, et la série s'arrête seule après 6 s sans mouvement.
 6. Renseigner le mouvement et la charge, puis « Enregistrer la série ».
 
@@ -38,5 +42,28 @@ Test sur une vidéo de synthèse de 5 reps de 45 cm, avec des vitesses connues (
 
 Ce test valide les calculs, mais pas les conditions réelles (lumière, flou de bougé, perspective). Une comparaison avec un capteur linéaire sur de vraies séries reste nécessaire.
 
+## Corrections après le premier essai réel (développé couché, disque Eleiko vert)
+- Les disques de couleur mate (peu saturée) sont maintenant détectés ; avant, ils étaient écartés par un seuil de saturation trop strict.
+- Ajout du calibrage automatique sur la hauteur du disque suivi.
+- La sortie et le retour au rack ne sont plus comptés comme des reps (déplacement surtout horizontal, ou amplitude très inférieure aux autres reps).
+- Résultat sur la vidéo d'essai : 4 reps détectées (1 + 3), cible suivie sur 100 % des images.
+
+## Mode essai (validation avec un appareil de référence)
+1. Cocher **« Filmer la série »** sous les boutons : la vidéo de la caméra est enregistrée pendant la série.
+2. Faire la série avec l'appareil de référence branché en parallèle (capteur linéaire, centrale inertielle…).
+3. Dans les résultats, ouvrir **« Valeurs de l'appareil de référence »** : indiquer l'appareil, puis saisir rep par rep la vitesse moyenne (et si possible la vitesse max et l'amplitude). L'écart avec l'appli s'affiche aussitôt.
+4. Enregistrer la série, puis exporter :
+   - **Télécharger la vidéo** et **Télécharger l'essai (JSON)**, ou **Partager vidéo + essai** sur téléphone ;
+   - le JSON contient les réglages, la couleur ciblée, le calibrage, la position détectée image par image, les reps calculées et les valeurs de référence.
+5. Envoyer la vidéo et le JSON pour l'amélioration de l'algorithme.
+
+## Analyser une vidéo enregistrée
+« Analyser une vidéo enregistrée… » ouvre une vidéo du téléphone, par exemple filmée avec l'appareil photo à 60 ou 120 images/s, plus précis que la caméra du navigateur. Ensuite :
+- placer le curseur sur une image où la barre est immobile ;
+- cibler la couleur et calibrer ;
+- lancer « Analyser la vidéo ».
+
+La lecture est ralentie (×0,25 par défaut) pour analyser chaque image. Un avertissement apparaît si des images ont été sautées.
+
 ## Mise à jour
-Remplacer `index.html`, puis augmenter le numéro de version dans `sw.js` (`vitesse-barre-v1` → `v2`…).
+Remplacer `index.html`, puis augmenter le numéro de version dans `sw.js` (`vitesse-barre-v3` → `v4`…).
