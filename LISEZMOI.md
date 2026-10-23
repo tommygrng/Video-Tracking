@@ -95,5 +95,18 @@ Bonnes pratiques de calibrage :
 - toucher la **surface colorée** du disque, loin des lettres ;
 - vérifier que le contour bleu épouse le bord du disque.
 
+## Version 5 : même précision en direct qu'en vidéo réimportée (23/10)
+
+Constat : en direct, les vitesses étaient ~40 % trop basses (essai 18:07) alors que la même vidéo réimportée donnait des valeurs proches du Tendo. Cause : la série directe a utilisé une **échelle mm/pixel mémorisée d'une session précédente** (0,00103 m/px au lieu de ~0,0017), sans recalibrer ; la réimportation, elle, refaisait le calibrage. Le suivi lui-même était bon (0 % d'images perdues).
+
+Corrections :
+- **Échelle recalculée à chaque série** quand on suit le disque : diamètre du disque ÷ hauteur médiane du disque mesurée pendant la série (images où la barre est quasi immobile). Un calibrage ancien ou une distance téléphone–barre différente n'ont plus d'effet. L'ajustement −/+ reste appliqué (en %). L'échelle utilisée est affichée sous les résultats et exportée dans le JSON (`echelle_serie`).
+- Mesure de la taille du disque sur les percentiles 1–99 % (au lieu de 2–98 %), qui sous-estimaient le diamètre d'environ 3 à 8 %.
+
+Résultats (vidéos réimportées, calibrage automatique, sans ajustement manuel) :
+- Essai 18:07 (Tendo 0,83 / 0,81 / 0,50 / 0,94) : 0,89 / 0,76 / 0,52 / 0,91 → biais moyen +0,4 %, écart par rep ±3 à 7 %. Résultat identique avec un ancien calibrage périmé forcé.
+- Essai 17:21 (réf 0,80 / 0,86 / 0,78 / 0,72) : biais moyen −3,6 %.
+- Squat synthétique : écarts −3,8 à +2,4 %.
+
 ## Mise à jour
-Remplacer `index.html`, puis augmenter le numéro de version dans `sw.js` (`vitesse-barre-v4` → `v5`…).
+Remplacer `index.html`, puis augmenter le numéro de version dans `sw.js` (`vitesse-barre-v5` → `v6`…).

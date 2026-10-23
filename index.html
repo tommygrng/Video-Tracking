@@ -357,7 +357,7 @@ function blobAt(d, pw, ph, m, x0, y0){
     for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++){ if (!dx && !dy) continue; const nx = x + dx, ny = y + dy; if (nx < 0 || ny < 0 || nx >= pw || ny >= ph) continue;
       const n = ny * pw + nx; if (seen[n]) continue; seen[n] = 1; const i = n * 4; if (m(d[i], d[i+1], d[i+2])) q.push(n); } }
   const pct = (a, p) => { const b = Float32Array.from(a).sort(); return b[Math.min(b.length - 1, Math.floor(p * (b.length - 1)))]; };
-  return {n: xs.length, x: xs.reduce((a, b) => a + b, 0) / xs.length, y: ys.reduce((a, b) => a + b, 0) / ys.length, ev: pct(ys, 0.98) - pct(ys, 0.02) + 1, eh: pct(xs, 0.98) - pct(xs, 0.02) + 1};
+  return {n: xs.length, x: xs.reduce((a, b) => a + b, 0) / xs.length, y: ys.reduce((a, b) => a + b, 0) / ys.length, ev: pct(ys, 0.99) - pct(ys, 0.01) + 1, eh: pct(xs, 0.99) - pct(xs, 0.01) + 1};
 }
 function track(img, pw, ph){
   const m = matcher(), d = img.data, kx = S.vw / pw;
@@ -391,7 +391,7 @@ function track(img, pw, ph){
   if (!res){ S.lostN++; if (S.lostN >= 8){ S.last = null; S.prev = null; } return null; }
   if (mask){ mask.data.fill(0); const R2 = R * R; for (let y = Math.max(0, Math.floor(c.y - R)); y < Math.min(ph, Math.ceil(c.y + R)); y++) for (let x = Math.max(0, Math.floor(c.x - R)); x < Math.min(pw, Math.ceil(c.x + R)); x++){
     if ((x - c.x) ** 2 + (y - c.y) ** 2 > R2) continue; const i = (y * pw + x) * 4; if (m(d[i], d[i+1], d[i+2])){ mask.data[i] = 255; mask.data[i+2] = 255; mask.data[i+3] = 170; } } }
-  const span = h => { let tot = 0; for (const v of h) tot += v; let acc = 0, a = null, b = null; for (let k = 0; k < h.length; k++){ acc += h[k]; if (a == null && acc >= tot * 0.02) a = k; if (b == null && acc >= tot * 0.98){ b = k; break; } } return a != null && b != null ? b - a + 1 : 0; };
+  const span = h => { let tot = 0; for (const v of h) tot += v; let acc = 0, a = null, b = null; for (let k = 0; k < h.length; k++){ acc += h[k]; if (a == null && acc >= tot * 0.01) a = k; if (b == null && acc >= tot * 0.99){ b = k; break; } } return a != null && b != null ? b - a + 1 : 0; };
   const ev = span(res.rows), eh = span(res.cols);
   S.prev = S.last; S.last = c; S.lastGood = c; S.lostN = 0; S.blobR = D / 2;
   return {x: c.x, y: c.y, n: res.n, ext: ev, exth: eh, big: D > 0.12 * Math.min(pw, ph)};
@@ -449,7 +449,7 @@ ov.addEventListener('pointerdown', ev => {
 function finishAutoCal(){
   const med = arr => { const a = [...arr].sort((x, y) => x - y); return a[Math.floor(a.length / 2)]; };
   if (S.isPlate){
-    const dv = med(S.areas.map(z => z.ext)), dh = med(S.areas.map(z => z.exth)); O.calDvRaw = dv; O.calDv = dv; O.calDh = dh; O.mPerPx = (num(O.diam) / 100) / dv; O.calMode = 'plate-auto';
+    const dv = med(S.areas.map(z => z.ext)), dh = med(S.areas.map(z => z.exth)); O.calDvRaw = dv; O.calDv = dv; O.calDh = dh; O.calV = 5; O.mPerPx = (num(O.diam) / 100) / dv; O.calMode = 'plate-auto';
     O.Dvid = Math.max(dv, dh); S.D = null;
     const tilt = dv / dh;
     hint(`Calibré sur le disque suivi : ${fmt(num(O.diam), 0)} cm ≈ ${Math.round(dv)} px de haut. <b>Vérifiez que le contour bleu épouse le bord du disque</b> ; sinon ajustez-le avec − / +.${tilt < 0.93 ? ` Le disque apparaît ovale (${Math.round(tilt * 100)} %) : le téléphone n'est pas bien en face du disque ; placez-le à hauteur du disque et bien vertical.` : ''}`);
@@ -487,14 +487,26 @@ async function startRec(){
   startVideoRec();
   beep(660, 0.12); hint('Mesure en cours… Faites vos reps. La série s\'arrête seule après ' + O.stop + ' s sans mouvement, ou touchez « Arrêter la série ».' + (S.vidRec ? ' <b>Vidéo en cours d\'enregistrement.</b>' : '')); steps();
 }
+// v5 : en mode disque, l'échelle est recalculée à chaque série à partir de la taille du disque suivi
+// (médiane des hauteurs mesurées pendant la série) × l'ajustement −/+ de l'utilisateur. Plus de calibrage périmé possible.
+function setScale(){
+  const plate = S.isPlate && O.calMode !== 'plate' && O.calMode !== 'marker';
+  const V = S.samples.filter(z => isFinite(z.e) && z.e > 0 && isFinite(z.y));
+  // de préférence les images où la barre est quasi immobile (pas de flou de bougé)
+  const still = V.filter((z, i) => i > 0 && i < V.length - 1 && Math.abs(V[i + 1].y - V[i - 1].y) < 3);
+  const E = (still.length >= 10 ? still : V).map(z => z.e).sort((a, b) => a - b);
+  if (!plate || E.length < 5){ S.scale = null; return O.mPerPx; }
+  const dv = E[Math.floor(E.length / 2)], k = (O.calV === 5 && O.calDvRaw && O.calDv) ? O.calDv / O.calDvRaw : 1, mpp = (num(O.diam) / 100) / (dv * k);
+  S.scale = {dv, k, mpp, stored: O.mPerPx}; return mpp;
+}
 function stopRec(){
   if (S.vidRec && S.vidRec.state !== 'inactive'){ try{ S.vidRec.stop(); }catch(e){} } S.vidRec = null;
   if (S.src === 'file'){ video.pause(); video.playbackRate = 1; try{ S.fileFrames = S.vq0 != null ? video.getVideoPlaybackQuality().totalVideoFrames - S.vq0 : null; }catch(e){ S.fileFrames = null; } }
-  S.rec = false; const res = analyze(S.samples, O.mPerPx, num(O.rom) / 100); S.res = res; beep(440, 0.2);
+  S.rec = false; const res = analyze(S.samples, setScale(), num(O.rom) / 100); S.res = res; beep(440, 0.2);
   showResults(res); hint(res.reps.length ? `${res.reps.length} rep${res.reps.length > 1 ? 's' : ''} détectée${res.reps.length > 1 ? 's' : ''}. Renseignez le mouvement et la charge, puis enregistrez.` : 'Aucune rep détectée : vérifiez que la pastille est suivie pendant tout le mouvement et que l\'amplitude minimale n\'est pas trop élevée.'); steps();
 }
 function liveUpdate(){
-  const res = analyze(S.samples, O.mPerPx, num(O.rom) / 100, true); S.lastAnalysis = res;
+  const res = analyze(S.samples, setScale(), num(O.rom) / 100, true); S.lastAnalysis = res;
   const n = res.reps.length;
   if (n > S.repsSeen){ S.repsSeen = n; beep(); }
   $('#mReps').textContent = n;
@@ -575,7 +587,7 @@ function showResults(res){
   if (q.sizeVar > 15) warns.push(`La taille apparente de la cible a varié de ${Math.round(q.sizeVar)} % : la barre s'est probablement rapprochée ou éloignée du téléphone, les mesures sont faussées.`);
   if (S.src === 'file' && S.fileFrames && S.samples.length < 0.9 * S.fileFrames) warns.push(`${S.samples.length} images analysées sur ${S.fileFrames} décodées : des images ont été sautées. Relancez l'analyse avec une lecture plus lente (Réglages › Vitesse de lecture).`);
   const excl = (res.excluded || []).map(r => `Mouvement à ${fmt(r.t0, 1)} s non compté (${fmt(r.rom * 100, 0)} cm) : ${r.why}.`);
-  $('#quality').innerHTML = `<p class="note">${fmt(q.dur, 1)} s enregistrées · ${Math.round(q.fps)} images/s · cible suivie sur ${Math.round(100 - q.lostPct)} % des images.</p>` + excl.map(w => `<p class="note">${esc(w)}</p>`).join('') + warns.map(w => `<p class="warn">${esc(w)}</p>`).join('');
+  $('#quality').innerHTML = `<p class="note">${fmt(q.dur, 1)} s enregistrées · ${Math.round(q.fps)} images/s · cible suivie sur ${Math.round(100 - q.lostPct)} % des images.</p>` + (S.scale ? `<p class="note">Échelle de la série : disque de ${fmt(num(O.diam), 0)} cm ≈ ${Math.round(S.scale.dv * S.scale.k)} px (mesuré sur cette série${S.scale.k !== 1 ? ', ajustement ' + (S.scale.k > 1 ? '+' : '') + fmt((S.scale.k - 1) * 100, 1) + ' %' : ''}).</p>` : '') + excl.map(w => `<p class="note">${esc(w)}</p>`).join('') + warns.map(w => `<p class="warn">${esc(w)}</p>`).join('');
   const best = R.length ? Math.max(...R.map(r => r.mcv)) : 0;
   $('#tReps').innerHTML = R.length ? `<thead><tr><th>Rep</th><th>Ampl. cm</th><th>V moy m/s</th><th>V max m/s</th><th>Montée s</th><th>Perte</th></tr></thead><tbody>${R.map(r => `<tr class="${r.mcv === best ? 'best' : ''}"><td>${r.n}</td><td>${fmt(r.rom * 100, 1)}</td><td>${fmt(r.mcv)}</td><td>${fmt(r.vpk)}</td><td>${fmt(r.dur)}</td><td>${best ? Math.round((best - r.mcv) / best * 100) + ' %' : ''}</td></tr>`).join('')}</tbody>` : '';
   drawV(R); drawP(res); renderRef();
@@ -647,7 +659,7 @@ function trialJSON(){
     video: {width: S.vw, height: S.vh, camera_fps_setting: set.frameRate || null},
     exercise: $('#sEx').value.trim(), load_kg: $('#sLoad').value.trim(), comment: $('#sNote').value.trim(),
     settings: {obj: O.obj, diam_cm: num(O.diam), marker_cm: num(O.mark), min_rom_cm: num(O.rom), tol_hue: +O.tol, analysis_width_px: +O.res, file_rate: +O.fileRate || 0.5},
-    target: O.target, calibration: {mode: O.calMode, m_per_px: O.mPerPx, plate_px_v: O.calDv || null, plate_px_v_auto: O.calDvRaw || null, plate_px_h: O.calDh || null, target_px: O.Dvid || null},
+    target: O.target, calibration: {mode: O.calMode, m_per_px: S.scale ? S.scale.mpp : O.mPerPx, m_per_px_calibrage: O.mPerPx, echelle_serie: S.scale ? {plate_px_mediane: S.scale.dv, ajustement: S.scale.k} : null, plate_px_v: O.calDv || null, plate_px_v_auto: O.calDvRaw || null, plate_px_h: O.calDh || null, target_px: O.Dvid || null},
     samples: S.samples.map(p => [Math.round(p.t * 1e4) / 1e4, isFinite(p.x) ? Math.round(p.x * 10) / 10 : null, isFinite(p.y) ? Math.round(p.y * 10) / 10 : null, isFinite(p.a) ? Math.round(p.a) : null, isFinite(p.e) ? Math.round(p.e * 10) / 10 : null, isFinite(p.h) ? Math.round(p.h * 10) / 10 : null]),
     samples_columns: ['t_s', 'x_px', 'y_px', 'aire_px2', 'hauteur_cible_px', 'largeur_cible_px'],
     results: {reps: (res.reps || []).map(r => ({n: r.n, t0: r.t0, t1: r.t1, rom_m: r.rom, mcv: r.mcv, vpk: r.vpk, t_pic_s: r.tpk, dur_s: r.dur, ecc: r.ecc, drift_m: r.drift})),
