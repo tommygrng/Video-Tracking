@@ -65,5 +65,35 @@ Ce test valide les calculs, mais pas les conditions réelles (lumière, flou de 
 
 La lecture est ralentie (×0,25 par défaut) pour analyser chaque image. Un avertissement apparaît si des images ont été sautées.
 
+## Version 4 : corrections après les essais avec référence (développé couché, 23/10)
+Constat sur l'essai avec référence : l'appli sous-estimait la vitesse moyenne d'environ 13 % (≈ 0,1 m/s). Deux causes :
+- **Calibrage faussé.** Des pixels de même couleur hors du disque (plafond vert pâle, éléments du décor) étaient comptés avec lui. Le disque paraissait donc plus grand (280 px au lieu d'environ 240), et toutes les distances et vitesses étaient trop petites.
+- **Contour instable.** Pour la même raison, le cercle affiché était grand et changeait de taille.
+
+Corrections :
+- **Suivi limité à un cercle de la taille du disque** : les pixels de même couleur hors du disque sont ignorés, ce qui stabilise le centre et la taille.
+- **Taille de la cible estimée dès le ciblage**, par détection du disque entier autour du point touché. Un avertissement apparaît si la zone reconnue n'est pas ronde (lettre ou reflet touché).
+- **Recherche de la cible perdue** sur une fenêtre de la taille du disque, et non plus sur une petite case qui pouvait accrocher le décor.
+- **Contour affiché de taille fixe**, égal au disque calibré : il doit épouser le bord du disque. Des boutons − / + permettent de l'ajuster finement, ce qui corrige le calibrage.
+- **Alerte « disque ovale »** quand le téléphone n'est pas bien en face du disque.
+- Les mouvements d'amplitude anormalement grande (téléphone repris en main) ne sont plus comptés.
+- Option « temps de pose court » (Android) pour réduire le flou de bougé.
+
+Résultat sur l'essai de 17 h 21, ré-analysé avec la nouvelle version :
+
+| Rep | Appli | Référence | Écart |
+|---|---|---|---|
+| 1 | 0,81 m/s | 0,80 | +1,0 % |
+| 2 | 0,84 m/s | 0,86 | −2,1 % |
+| 3 | 0,82 m/s | 0,78 | +4,7 % |
+| 4 | 0,68 m/s | 0,72 | −5,6 % |
+
+Biais moyen −0,5 %, écart absolu moyen 3,4 % (contre −13 % de biais avant).
+
+Bonnes pratiques de calibrage :
+- calibrer quand le disque est **entièrement visible** et immobile (barre en haut, pas au rack derrière un montant) ;
+- toucher la **surface colorée** du disque, loin des lettres ;
+- vérifier que le contour bleu épouse le bord du disque.
+
 ## Mise à jour
-Remplacer `index.html`, puis augmenter le numéro de version dans `sw.js` (`vitesse-barre-v3` → `v4`…).
+Remplacer `index.html`, puis augmenter le numéro de version dans `sw.js` (`vitesse-barre-v4` → `v5`…).
