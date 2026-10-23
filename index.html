@@ -92,7 +92,7 @@ details summary{cursor:pointer;font-weight:600}
 
   <div class="steps" id="steps">
     <span class="step" data-st="cam">1 · Caméra</span>
-    <span class="step" data-st="pick">2 · Pastille</span>
+    <span class="step" data-st="pick">2 · Cible</span>
     <span class="step" data-st="calib">3 · Calibrage</span>
     <span class="step" data-st="rec">4 · Mesure</span>
   </div>
@@ -100,7 +100,7 @@ details summary{cursor:pointer;font-weight:600}
   <div class="stagebox"><div class="stage" id="stage" style="aspect-ratio:16/9">
     <video id="video" playsinline muted autoplay></video>
     <canvas id="ov"></canvas>
-    <div class="placeholder" id="ph">Posez le téléphone de profil, à hauteur des disques, à 1,5–3 m de la barre.<br>Collez une pastille de couleur vive au centre du disque.</div>
+    <div class="placeholder" id="ph">Posez le téléphone de profil, à hauteur des disques, à 1,5–3 m de la barre.<br>Suivez un disque de couleur (vert, bleu, rouge, jaune…) ou une pastille vive collée au centre d'un disque noir.</div>
   </div></div>
 
   <div class="hint" id="hint">Touchez « Allumer la caméra ».</div>
@@ -113,9 +113,9 @@ details summary{cursor:pointer;font-weight:600}
 
   <div class="actions">
     <button class="primary" id="bCam">Allumer la caméra</button>
-    <button id="bPick" disabled>Cibler la pastille</button>
+    <button id="bPick" disabled>Cibler la couleur</button>
     <button id="bCal" disabled>Calibrer sur le disque</button>
-    <button id="bCalAuto" disabled>Calibrer sur la pastille</button>
+    <button id="bCalAuto" disabled>Calibrer automatiquement</button>
     <button class="primary" id="bRec" disabled>Démarrer la série</button>
   </div>
 
@@ -145,6 +145,7 @@ details summary{cursor:pointer;font-weight:600}
     <details id="setDetails">
       <summary>Réglages</summary>
       <div class="form" style="margin-top:10px">
+        <label class="f" for="oObj">Objet suivi<select id="oObj"><option value="auto">Automatique</option><option value="marker">Pastille collée</option><option value="plate">Disque entier (coloré)</option></select></label>
         <label class="f" for="oDiam">Diamètre du disque (cm)<input id="oDiam" inputmode="decimal"></label>
         <label class="f" for="oMark">Diamètre de la pastille (cm)<input id="oMark" inputmode="decimal"></label>
         <label class="f" for="oRom">Amplitude mini d'une rep (cm)<input id="oRom" inputmode="decimal"></label>
@@ -166,7 +167,8 @@ details summary{cursor:pointer;font-weight:600}
     <details>
       <summary>Mode d'emploi et limites</summary>
       <div class="note" style="display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:13px">
-        <p><b>Installation au rack.</b> Pastille ronde de couleur vive (rose, vert, orange fluo, 4–6 cm) au centre du disque extérieur. Téléphone fixe, perpendiculaire à la barre, objectif à hauteur des disques, à 1,5–3 m. Tout le trajet de la barre doit rester dans l'image.</p>
+        <p><b>Cible.</b> Avec un disque de couleur (bumper vert, bleu, rouge, jaune), touchez simplement le disque : l'appli suit le disque entier, puis « Calibrer automatiquement » mesure sa hauteur (45 cm par défaut). Avec des disques noirs ou gris, collez une pastille ronde de couleur vive (4–6 cm) au centre du disque extérieur.</p>
+        <p><b>Installation au rack.</b> Téléphone fixe, perpendiculaire à la barre, objectif à hauteur des disques, à 1,5–3 m. Tout le trajet de la barre doit rester dans l'image.</p>
         <p><b>Calibrage.</b> « Calibrer sur le disque » : touchez le bord haut puis le bord bas du disque (45 cm pour un disque olympique de 20/25 kg). C'est la méthode la plus précise. « Calibrer sur la pastille » utilise la taille de la pastille, plus rapide mais moins précis. À refaire si vous déplacez le téléphone.</p>
         <p><b>Mesures.</b> Une rep = une montée d'au moins l'amplitude minimale. Vitesse moyenne concentrique = amplitude ÷ durée de la montée ; vitesse maximale = pic de la vitesse lissée ; perte de vitesse = (meilleure − dernière) ÷ meilleure.</p>
         <p><b>Limites.</b> La mesure suppose que la barre se déplace dans un plan parallèle au téléphone : si elle se rapproche ou s'éloigne de la caméra, la mesure est faussée (l'appli le signale quand la taille apparente de la pastille varie). À 30 images/s, la vitesse moyenne reste correcte mais la vitesse maximale et les mouvements très rapides sont moins précis. Ordre de grandeur attendu : 5–10 % d'écart avec un capteur linéaire.</p>
@@ -186,7 +188,7 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;
 const num = v => { const x = parseFloat(String(v ?? '').replace(',', '.')); return isFinite(x) ? x : NaN; };
 
 /* ---------- réglages persistants ---------- */
-const DEF = {diam:45, mark:5, rom:15, tol:18, res:480, fps:60, stop:6, beep:true, mask:false, target:null, mPerPx:null, calMode:null};
+const DEF = {obj:'auto', diam:45, mark:5, rom:15, tol:22, res:480, fps:60, stop:6, beep:true, mask:false, target:null, mPerPx:null, calMode:null};
 const O = {...DEF};
 let HIST = [];
 try{ Object.assign(O, JSON.parse(localStorage.getItem(LS + '-opt') || '{}')); HIST = JSON.parse(localStorage.getItem(LS + '-hist') || '[]'); }catch(e){}
@@ -208,7 +210,7 @@ function steps(){
   $('#bRec').disabled = !S.stream || !O.target || !O.mPerPx;
   $('#bRec').textContent = S.rec ? 'Arrêter la série' : 'Démarrer la série'; $('#bRec').className = S.rec ? 'rec' : 'primary';
   $('#bCam').textContent = S.stream ? 'Éteindre la caméra' : 'Allumer la caméra'; $('#bCam').className = S.stream ? '' : 'primary';
-  $('#calInfo').innerHTML = O.mPerPx ? `Calibrage actuel : ${fmt(O.mPerPx*1000, 3)} mm par pixel vidéo (${O.calMode === 'plate' ? 'sur le disque' : 'sur la pastille'}).` : 'Pas encore de calibrage.';
+  $('#calInfo').innerHTML = O.mPerPx ? `Calibrage actuel : ${fmt(O.mPerPx*1000, 3)} mm par pixel vidéo (${O.calMode === 'plate' ? 'touches sur le disque' : O.calMode === 'plate-auto' ? 'disque suivi, automatique' : 'sur la pastille'}).` : 'Pas encore de calibrage.';
 }
 
 /* ---------- caméra ---------- */
@@ -256,7 +258,7 @@ function rgb2hsv(r, g, b){
 }
 function matcher(){
   const t = O.target; if (!t) return null;
-  const tolH = +O.tol, minS = Math.max(0.22, t.s * 0.45), minV = Math.max(0.18, t.v * 0.35);
+  const tolH = +O.tol, minS = Math.max(0.06, Math.min(0.22, t.s * 0.5)), minV = Math.max(0.1, t.v * 0.35);
   return (r, g, b) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; if (!mx) return false;
     const v = mx / 255, s = d / mx; if (s < minS || v < minV) return false;
     let h; if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4; h *= 60; if (h < 0) h += 360;
@@ -282,8 +284,9 @@ function frame(t){
   S.fpsT.push(t); while (S.fpsT.length > 30) S.fpsT.shift();
   if (det){
     const s = {t, x: det.x * kx, y: det.y * kx, a: det.n * kx * kx};
-    if (S.stage === 'calauto'){ S.areas.push(s.a); if (S.areas.length >= 20) finishAutoCal(); }
-    if (S.rec){ if (S.t0 == null) S.t0 = t; S.samples.push({t: t - S.t0, x: s.x, y: s.y, a: s.a}); }
+    S.isPlate = O.obj === 'plate' || (O.obj === 'auto' && det.big);
+    if (S.stage === 'calauto'){ S.areas.push({a: s.a, ext: det.ext * kx}); if (S.areas.length >= 20) finishAutoCal(); }
+    if (S.rec){ if (S.t0 == null) S.t0 = t; S.samples.push({t: t - S.t0, x: s.x, y: s.y, a: s.a, e: det.ext * kx}); }
   } else if (S.rec){ if (S.t0 == null) S.t0 = t; S.samples.push({t: t - S.t0, x: NaN, y: NaN, a: NaN}); }
   S.frames++;
   if (S.rec && S.frames % 6 === 0) liveUpdate();
@@ -293,10 +296,13 @@ function track(img, pw, ph){
   const m = matcher(), d = img.data;
   const mask = O.mask ? (S.maskImg && S.maskImg.width === pw ? S.maskImg : (S.maskImg = new ImageData(pw, ph))) : null;
   if (mask) mask.data.fill(0);
-  const scan = (x0, y0, x1, y1, step) => { let sx = 0, sy = 0, n = 0;
-    for (let y = Math.max(0, y0); y < Math.min(ph, y1); y += step) for (let x = Math.max(0, x0); x < Math.min(pw, x1); x += step){
-      const i = (y * pw + x) * 4; if (m(d[i], d[i+1], d[i+2])){ sx += x; sy += y; n++; if (mask){ mask.data[i] = 255; mask.data[i+1] = 0; mask.data[i+2] = 255; mask.data[i+3] = 170; } } }
-    return {sx, sy, n}; };
+  const scan = (x0, y0, x1, y1, step) => { let sx = 0, sy = 0, n = 0; const rows = [];
+    for (let y = Math.max(0, y0); y < Math.min(ph, y1); y += step){ let rn = 0; for (let x = Math.max(0, x0); x < Math.min(pw, x1); x += step){
+      const i = (y * pw + x) * 4; if (m(d[i], d[i+1], d[i+2])){ sx += x; sy += y; n++; rn++; if (mask){ mask.data[i] = 255; mask.data[i+1] = 0; mask.data[i+2] = 255; mask.data[i+3] = 170; } } }
+      if (rn) rows.push([y, rn]); }
+    return {sx, sy, n, rows}; };
+  const extent = rows => { const tot = rows.reduce((a, r) => a + r[1], 0); let c = 0, y0 = null, y1 = null;
+    for (const [y, k] of rows){ c += k; if (y0 == null && c >= tot * 0.02) y0 = y; if (y1 == null && c >= tot * 0.98) y1 = y; } return y0 != null && y1 != null ? y1 - y0 + 1 : 0; };
   let cx, cy;
   if (S.last && S.lostN < 8){ cx = S.last.x; cy = S.last.y; }
   else { // recherche grossière : cellule la plus dense
@@ -316,7 +322,7 @@ function track(img, pw, ph){
   if (r.n < 5){ S.lostN++; return null; }
   x = r.sx / r.n; y = r.sy / r.n;
   S.blobR = Math.sqrt(r.n / Math.PI); S.last = {x, y}; S.lostN = 0;
-  return {x, y, n: r.n};
+  return {x, y, n: r.n, ext: extent(r.rows), big: extent(r.rows) > 0.12 * Math.min(pw, ph)};
 }
 function draw(det, kx){
   const W = ov.width, H = ov.height, sx = W / S.vw; octx.clearRect(0, 0, W, H);
@@ -330,7 +336,7 @@ function draw(det, kx){
     for (let i = Math.max(0, S.samples.length - 240); i < S.samples.length; i++){ const p = S.samples[i]; if (!isFinite(p.x)){ st = false; continue; } if (!st){ octx.moveTo(p.x * sx, p.y * sx); st = true; } else octx.lineTo(p.x * sx, p.y * sx); } octx.stroke(); }
   if (det){ octx.strokeStyle = '#38d6f2'; octx.lineWidth = lw * 1.5; octx.beginPath(); octx.arc(det.x * kx * sx, det.y * kx * sx, Math.max(lw * 5, S.blobR * kx * sx * 1.4), 0, 7); octx.stroke();
     octx.beginPath(); octx.moveTo(det.x * kx * sx - lw * 6, det.y * kx * sx); octx.lineTo(det.x * kx * sx + lw * 6, det.y * kx * sx); octx.moveTo(det.x * kx * sx, det.y * kx * sx - lw * 6); octx.lineTo(det.x * kx * sx, det.y * kx * sx + lw * 6); octx.stroke(); }
-  else if (O.target && S.stage !== 'pick'){ octx.fillStyle = 'rgba(239,111,94,.9)'; octx.font = `${Math.round(14 * W / 600)}px system-ui`; octx.fillText('Pastille non trouvée', 12, 24 * W / 600); }
+  else if (O.target && S.stage !== 'pick'){ octx.fillStyle = 'rgba(239,111,94,.9)'; octx.font = `${Math.round(14 * W / 600)}px system-ui`; octx.fillText('Cible non trouvée', 12, 24 * W / 600); }
 }
 
 /* ---------- interactions sur l'image ---------- */
@@ -340,12 +346,15 @@ ov.addEventListener('pointerdown', ev => {
   const vx = fx * S.vw, vy = fy * S.vh;
   if (S.stage === 'pick'){
     const pw = proc.width, ph = proc.height; pctx.drawImage(video, 0, 0, pw, ph);
-    const px = Math.round(fx * pw), py = Math.round(fy * ph); const d = pctx.getImageData(Math.max(0, px - 2), Math.max(0, py - 2), 5, 5).data;
-    let r0 = 0, g0 = 0, b0 = 0; for (let i = 0; i < d.length; i += 4){ r0 += d[i]; g0 += d[i+1]; b0 += d[i+2]; } const n = d.length / 4;
-    const [h, s, v] = rgb2hsv(r0/n, g0/n, b0/n);
-    O.target = {h, s, v, rgb:[Math.round(r0/n), Math.round(g0/n), Math.round(b0/n)]}; saveO(); S.last = {x: px, y: py}; S.lostN = 0;
-    if (s < 0.3) hint(`<span class="swatch" style="background:rgb(${O.target.rgb})"></span>Couleur peu saturée : le suivi risque de décrocher. Utilisez une pastille plus vive, ou augmentez la tolérance dans les réglages.`);
-    else hint(`<span class="swatch" style="background:rgb(${O.target.rgb})"></span>Pastille mémorisée. ${O.mPerPx ? 'Prêt : « Démarrer la série ».' : 'Calibrez maintenant : « Calibrer sur le disque ».'}`);
+    const px = Math.round(fx * pw), py = Math.round(fy * ph); const d = pctx.getImageData(Math.max(0, px - 4), Math.max(0, py - 4), 9, 9).data;
+    const H = [], Sa = [], Va = []; let cx = 0, cy = 0, r0 = 0, g0 = 0, b0 = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4){ const [h, s, v] = rgb2hsv(d[i], d[i+1], d[i+2]); Sa.push(s); Va.push(v); cx += Math.cos(h * Math.PI / 180) * s; cy += Math.sin(h * Math.PI / 180) * s; r0 += d[i]; g0 += d[i+1]; b0 += d[i+2]; n++; }
+    const med = a => a.sort((x, y) => x - y)[Math.floor(a.length / 2)];
+    let h = Math.atan2(cy, cx) * 180 / Math.PI; if (h < 0) h += 360; const s = med(Sa), v = med(Va);
+    O.target = {h, s, v, rgb:[Math.round(r0/n), Math.round(g0/n), Math.round(b0/n)]}; saveO(); S.last = {x: px, y: py}; S.lostN = 0; S.blobR = 4;
+    const sw = `<span class="swatch" style="background:rgb(${O.target.rgb})"></span>`;
+    if (s < 0.08) hint(`${sw}Couleur presque grise : elle se confond avec le décor. Ciblez une zone colorée du disque ou une pastille vive.`);
+    else hint(`${sw}Couleur mémorisée. Vérifiez que le cercle bleu suit bien le disque ou la pastille. ${O.mPerPx ? 'Prêt : « Démarrer la série ».' : 'Calibrez : « Calibrer automatiquement » (le plus simple si vous suivez le disque entier) ou « Calibrer sur le disque ».'}`);
     S.stage = O.mPerPx ? 'rec' : 'calib'; steps(); return;
   }
   if (S.stage === 'cal1'){ S.calPts = [{x: vx, y: vy}]; S.stage = 'cal2'; hint('Touchez maintenant le <b>bord bas</b> du disque.'); steps(); return; }
@@ -356,9 +365,15 @@ ov.addEventListener('pointerdown', ev => {
     S.stage = O.target ? 'rec' : 'pick'; setTimeout(() => { S.calPts = []; }, 2500); steps(); return; }
 });
 function finishAutoCal(){
-  const a = [...S.areas].sort((x, y) => x - y); const med = a[Math.floor(a.length / 2)];
-  const dpx = 2 * Math.sqrt(med / Math.PI); O.mPerPx = (num(O.mark) / 100) / dpx; O.calMode = 'marker'; saveO(); S.areas = [];
-  S.stage = 'rec'; hint(`Calibré sur la pastille : ${fmt(num(O.mark), 1)} cm ≈ ${fmt(dpx, 1)} px. Moins précis que le disque ; vérifiez l'amplitude obtenue sur une première rep.`); steps();
+  const med = arr => { const a = [...arr].sort((x, y) => x - y); return a[Math.floor(a.length / 2)]; };
+  if (S.isPlate){
+    const dpx = med(S.areas.map(z => z.ext)); O.mPerPx = (num(O.diam) / 100) / dpx; O.calMode = 'plate-auto';
+    hint(`Calibré sur le disque suivi : ${fmt(num(O.diam), 0)} cm ≈ ${Math.round(dpx)} px de haut. Prêt : « Démarrer la série ».`);
+  } else {
+    const dpx = 2 * Math.sqrt(med(S.areas.map(z => z.a)) / Math.PI); O.mPerPx = (num(O.mark) / 100) / dpx; O.calMode = 'marker';
+    hint(`Calibré sur la pastille : ${fmt(num(O.mark), 1)} cm ≈ ${fmt(dpx, 1)} px. Moins précis que le disque ; vérifiez l'amplitude obtenue sur une première rep.`);
+  }
+  saveO(); S.areas = []; S.stage = 'rec'; steps();
 }
 
 /* ---------- enregistrement ---------- */
@@ -428,12 +443,18 @@ function analyze(raw, mpp, minRom, live){
     const xs = X.slice(a, b + 1); const drift = Math.max(...xs) - Math.min(...xs);
     out.reps.push({n: out.reps.length + 1, t0: T[a], t1: T[b], rom, dur, mcv: rom / dur, vpk: vp, tpk: tp - T[a], ecc, drift});
   }
+  // écarter la sortie / le retour au rack : déplacement surtout horizontal, ou amplitude bien plus courte que les autres reps
+  out.excluded = [];
+  out.reps = out.reps.filter(r => { if (r.drift > 0.6 * r.rom){ out.excluded.push({...r, why:'déplacement surtout horizontal (sortie ou retour au rack)'}); return false; } return true; });
+  if (out.reps.length >= 2){ const roms = out.reps.map(r => r.rom).sort((a, b) => a - b), medR = roms[Math.floor(roms.length / 2)];
+    out.reps = out.reps.filter(r => { if (r.rom < 0.6 * medR){ out.excluded.push({...r, why:'amplitude très inférieure aux autres reps'}); return false; } return true; }); }
+  out.reps.forEach((r, i) => r.n = i + 1);
   if (out.reps.length >= 2){ const best = Math.max(...out.reps.map(r => r.mcv)), last = out.reps[out.reps.length - 1].mcv; out.vl = (best - last) / best * 100; }
   // dernier instant de mouvement (|v| > 0,05 m/s)
   for (let i = V.length - 1; i >= 0; i--) if (Math.abs(V[i]) > 0.05){ out.lastMove = T[i]; break; }
   // qualité
   const dur = raw.length > 1 ? raw[raw.length - 1].t - raw[0].t : 0; const lost = raw.filter(s => !isFinite(s.y)).length;
-  const A = raw.map(s => s.a).filter(isFinite).sort((a, b) => a - b); const q = p => A.length ? A[Math.floor(p * (A.length - 1))] : NaN;
+  const A = raw.map(s => isFinite(s.e) && s.e > 0 ? s.e * s.e : s.a).filter(isFinite).sort((a, b) => a - b); const q = p => A.length ? A[Math.floor(p * (A.length - 1))] : NaN;
   out.quality = {fps: dur > 0 ? (raw.length - 1) / dur : 0, lostPct: raw.length ? lost / raw.length * 100 : 0, sizeVar: A.length ? (Math.sqrt(q(0.9)) - Math.sqrt(q(0.1))) / Math.sqrt(q(0.5)) * 100 : 0, dur};
   if (!live) out.series = {T, Y: Ys, V, X};
   return out;
@@ -445,9 +466,10 @@ function showResults(res){
   $('#mReps').textContent = R.length; $('#mV').textContent = R.length ? fmt(R[R.length - 1].mcv) : '–'; $('#mVL').textContent = res.vl != null ? Math.round(res.vl) + '%' : '–'; $('#mVL').classList.toggle('bad', res.vl >= 20);
   const warns = [];
   if (q.fps && q.fps < 25) warns.push(`Seulement ${Math.round(q.fps)} images/s : vitesses maximales peu fiables.`);
-  if (q.lostPct > 10) warns.push(`Pastille perdue sur ${Math.round(q.lostPct)} % des images : améliorez l'éclairage ou la tolérance couleur.`);
-  if (q.sizeVar > 15) warns.push(`La taille apparente de la pastille a varié de ${Math.round(q.sizeVar)} % : la barre s'est probablement rapprochée ou éloignée du téléphone, les mesures sont faussées.`);
-  $('#quality').innerHTML = `<p class="note">${fmt(q.dur, 1)} s enregistrées · ${Math.round(q.fps)} images/s · pastille suivie sur ${Math.round(100 - q.lostPct)} % des images.</p>` + warns.map(w => `<p class="warn">${esc(w)}</p>`).join('');
+  if (q.lostPct > 10) warns.push(`Cible perdue sur ${Math.round(q.lostPct)} % des images : améliorez l'éclairage ou la tolérance couleur.`);
+  if (q.sizeVar > 15) warns.push(`La taille apparente de la cible a varié de ${Math.round(q.sizeVar)} % : la barre s'est probablement rapprochée ou éloignée du téléphone, les mesures sont faussées.`);
+  const excl = (res.excluded || []).map(r => `Mouvement à ${fmt(r.t0, 1)} s non compté (${fmt(r.rom * 100, 0)} cm) : ${r.why}.`);
+  $('#quality').innerHTML = `<p class="note">${fmt(q.dur, 1)} s enregistrées · ${Math.round(q.fps)} images/s · cible suivie sur ${Math.round(100 - q.lostPct)} % des images.</p>` + excl.map(w => `<p class="note">${esc(w)}</p>`).join('') + warns.map(w => `<p class="warn">${esc(w)}</p>`).join('');
   const best = R.length ? Math.max(...R.map(r => r.mcv)) : 0;
   $('#tReps').innerHTML = R.length ? `<thead><tr><th>Rep</th><th>Ampl. cm</th><th>V moy m/s</th><th>V max m/s</th><th>Montée s</th><th>Perte</th></tr></thead><tbody>${R.map(r => `<tr class="${r.mcv === best ? 'best' : ''}"><td>${r.n}</td><td>${fmt(r.rom * 100, 1)}</td><td>${fmt(r.mcv)}</td><td>${fmt(r.vpk)}</td><td>${fmt(r.dur)}</td><td>${best ? Math.round((best - r.mcv) / best * 100) + ' %' : ''}</td></tr>`).join('')}</tbody>` : '';
   drawV(R); drawP(res);
@@ -498,13 +520,13 @@ function exportRaw(){
 $('#bCam').addEventListener('click', () => S.stream ? stopCam() : startCam());
 $('#bPick').addEventListener('click', () => { S.stage = 'pick'; S.last = null; hint('Touchez la <b>pastille</b> sur l\'image.'); steps(); });
 $('#bCal').addEventListener('click', () => { S.stage = 'cal1'; S.calPts = []; hint(`Touchez le <b>bord haut</b> du disque (diamètre réglé : ${fmt(num(O.diam), 0)} cm, modifiable dans les réglages).`); steps(); });
-$('#bCalAuto').addEventListener('click', () => { S.stage = 'calauto'; S.areas = []; hint(`Mesure de la pastille (${fmt(num(O.mark), 1)} cm) : gardez la barre immobile une seconde…`); steps(); });
+$('#bCalAuto').addEventListener('click', () => { S.stage = 'calauto'; S.areas = []; hint(S.isPlate ? `Mesure du disque suivi (${fmt(num(O.diam), 0)} cm) : gardez la barre immobile une seconde…` : `Mesure de la pastille (${fmt(num(O.mark), 1)} cm) : gardez la barre immobile une seconde…`); steps(); });
 $('#bRec').addEventListener('click', () => { if (S.rec) stopRec(); else startRec(); });
 $('#bSave').addEventListener('click', () => {
   if (!S.res || !S.res.reps.length){ setStatus('Aucune rep à enregistrer'); return; }
   const d = new Date(); const h = {id: 'h' + Date.now().toString(36), date: today(), time: `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`,
     ex: $('#sEx').value.trim(), load: $('#sLoad').value.trim(), reps: S.res.reps.map(r => ({n: r.n, rom: r.rom, mcv: r.mcv, vpk: r.vpk, dur: r.dur, tpk: r.tpk, ecc: r.ecc})),
-    vl: S.res.vl, q: S.res.quality, cal: O.calMode === 'plate' ? `disque ${O.diam} cm` : `pastille ${O.mark} cm`};
+    vl: S.res.vl, q: S.res.quality, cal: O.calMode === 'plate' ? `disque ${O.diam} cm (touches)` : O.calMode === 'plate-auto' ? `disque ${O.diam} cm (auto)` : `pastille ${O.mark} cm`};
   HIST.push(h); if (HIST.length > 500) HIST.shift(); saveH(); renderHist(); setStatus('Série enregistrée'); $('#bSave').disabled = true; setTimeout(() => $('#bSave').disabled = false, 1500);
   try{ localStorage.setItem(LS + '-ex', h.ex); }catch(e){}
 });
@@ -517,7 +539,7 @@ const bind = (id, key, conv = v => v) => { const el = $(id); if (el.type === 'ch
   el.addEventListener(el.type === 'checkbox' || el.tagName === 'SELECT' ? 'change' : 'input', () => { O[key] = el.type === 'checkbox' ? el.checked : conv(el.value); saveO();
     if (key === 'diam' || key === 'mark'){ O.mPerPx = null; saveO(); hint('Dimension modifiée : refaites le calibrage.'); steps(); }
     if (key === 'torch') applyTorch(); if (key === 'res') S.last = null; if (key === 'fps' && S.stream){ stopCam(); startCam(); } }); };
-bind('#oDiam', 'diam'); bind('#oMark', 'mark'); bind('#oRom', 'rom'); bind('#oTol', 'tol'); bind('#oRes', 'res'); bind('#oFps', 'fps'); bind('#oStop', 'stop');
+bind('#oObj', 'obj'); bind('#oDiam', 'diam'); bind('#oMark', 'mark'); bind('#oRom', 'rom'); bind('#oTol', 'tol'); bind('#oRes', 'res'); bind('#oFps', 'fps'); bind('#oStop', 'stop');
 bind('#oBeep', 'beep'); bind('#oMask', 'mask'); bind('#oTorch', 'torch');
 try{ $('#sEx').value = localStorage.getItem(LS + '-ex') || ''; }catch(e){}
 document.addEventListener('visibilitychange', async () => { if (document.visibilityState === 'visible' && S.stream && !S.wake){ try{ S.wake = await navigator.wakeLock.request('screen'); }catch(e){} } else if (document.visibilityState === 'hidden') S.wake = null; });
