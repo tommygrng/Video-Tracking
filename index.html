@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Vitesse Barre</title>
+<meta name="theme-color" content="#0f1318">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Vitesse Barre">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+/* Layout : vidéo en haut avec calque de suivi, bandeau de mesures géantes lisibles à distance, résultats et réglages dessous. Thème sombre unique (salle, écran au rack). */
+:root{
+  --bg:#0f1318; --surface:#171c23; --sunk:#12161c; --line:#2a313b; --ink:#e9edf2; --muted:#8e98a6;
+  --accent:#f0a83a; --accent-ink:#1a1206; --track:#38d6f2; --good:#5cc98a; --bad:#ef6f5e;
+  --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 var(--body)}
+[hidden]{display:none!important}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:9px 13px;min-height:42px}
+button:disabled{opacity:.45;cursor:default}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:700}
+button.rec{background:var(--bad);border-color:var(--bad);color:#fff;font-weight:700}
+button.ghost{background:transparent;border-color:transparent;color:var(--muted)}
+input,select{background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:8px 9px;min-height:40px;min-width:0}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:900px;margin:0 auto;padding-left:max(14px,env(safe-area-inset-left,0px));padding-right:max(14px,env(safe-area-inset-right,0px));padding-block:10px 40px;display:flex;flex-direction:column;gap:12px}
+header{display:flex;align-items:center;gap:10px}
+.brand{font-family:var(--display);font-weight:700;font-size:24px;letter-spacing:.03em;text-transform:uppercase}
+.brand span{color:var(--accent)}
+.status{margin-left:auto;font-size:12px;color:var(--muted);text-align:right}
+.stagebox{display:flex;justify-content:center}
+.stage{position:relative;background:#000;border-radius:12px;overflow:hidden;width:100%;max-width:100%;touch-action:manipulation}
+.stage video,.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.stage video{object-fit:fill}
+.stage .placeholder{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:20px;color:var(--muted)}
+.steps{display:flex;gap:6px;flex-wrap:wrap}
+.step{font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.step.on{border-color:var(--accent);color:var(--ink)}
+.step.ok{border-color:var(--good);color:var(--good)}
+.hint{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:10px 12px;font-size:14px}
+.big{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.big .m{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:0}
+.big b{display:block;white-space:nowrap;font-family:var(--display);font-size:clamp(30px,10vw,64px);line-height:1;font-variant-numeric:tabular-nums}
+.big span{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.big .vl b.bad{color:var(--bad)}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.actions button{flex:1 1 140px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.card h2{font-family:var(--display);font-size:22px;margin:0;line-height:1.1}
+.note{font-size:12px;color:var(--muted);margin:0}
+.warn{font-size:13px;color:var(--bad);margin:0}
+.tablebox{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:500;text-align:right;padding:4px 6px}
+th:first-child,td:first-child{text-align:left}
+td{padding:5px 6px;text-align:right;border-top:1px solid var(--line);font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.best td{color:var(--good)}
+.chart svg{display:block;width:100%;height:auto;max-width:100%}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.chart .ax{fill:var(--muted);font-size:11px;font-family:var(--mono)}
+.chart .pos{fill:none;stroke:var(--track);stroke-width:2}
+.chart .rep{fill:color-mix(in srgb,var(--accent) 18%,transparent)}
+.chart .bar{fill:var(--accent)}
+.chart .lab{fill:var(--ink);font-size:11px;font-family:var(--mono)}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+label.c{display:flex;gap:8px;align-items:center;font-size:13px}
+details summary{cursor:pointer;font-weight:600}
+.hist{display:flex;flex-direction:column;gap:6px}
+.hist .h{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;border-top:1px solid var(--line);padding-top:6px;font-size:13px}
+.hist .h small{display:block;color:var(--muted)}
+.swatch{display:inline-block;width:16px;height:16px;border-radius:50%;vertical-align:middle;border:1px solid var(--line);margin-right:6px}
+@media (min-width:760px){.big b{font-size:60px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">Vitesse <span>Barre</span></div>
+    <div class="status" id="status">Caméra éteinte</div>
+  </header>
+
+  <div class="steps" id="steps">
+    <span class="step" data-st="cam">1 · Caméra</span>
+    <span class="step" data-st="pick">2 · Pastille</span>
+    <span class="step" data-st="calib">3 · Calibrage</span>
+    <span class="step" data-st="rec">4 · Mesure</span>
+  </div>
+
+  <div class="stagebox"><div class="stage" id="stage" style="aspect-ratio:16/9">
+    <video id="video" playsinline muted autoplay></video>
+    <canvas id="ov"></canvas>
+    <div class="placeholder" id="ph">Posez le téléphone de profil, à hauteur des disques, à 1,5–3 m de la barre.<br>Collez une pastille de couleur vive au centre du disque.</div>
+  </div></div>
+
+  <div class="hint" id="hint">Touchez « Allumer la caméra ».</div>
+
+  <div class="big">
+    <div class="m"><b id="mReps">0</b><span>Reps</span></div>
+    <div class="m"><b id="mV">–</b><span>Vit. moy. conc. m/s</span></div>
+    <div class="m vl"><b id="mVL">–</b><span>Perte de vitesse</span></div>
+  </div>
+
+  <div class="actions">
+    <button class="primary" id="bCam">Allumer la caméra</button>
+    <button id="bPick" disabled>Cibler la pastille</button>
+    <button id="bCal" disabled>Calibrer sur le disque</button>
+    <button id="bCalAuto" disabled>Calibrer sur la pastille</button>
+    <button class="primary" id="bRec" disabled>Démarrer la série</button>
+  </div>
+
+  <section class="card" id="res" hidden>
+    <h2>Résultats de la série</h2>
+    <div id="quality"></div>
+    <div class="tablebox"><table id="tReps"></table></div>
+    <div class="chart" id="cV"></div>
+    <div class="chart" id="cP"></div>
+    <div class="form">
+      <label class="f" for="sEx">Mouvement<input id="sEx" list="exl" placeholder="ex. Back squat"></label>
+      <label class="f" for="sLoad">Charge (kg)<input id="sLoad" inputmode="decimal" placeholder="ex. 100"></label>
+    </div>
+    <div class="actions">
+      <button class="primary" id="bSave">Enregistrer la série</button>
+      <button id="bRaw">Exporter la trajectoire (CSV)</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Historique</h2>
+    <div class="hist" id="hist"></div>
+    <div class="actions"><button id="bExp">Exporter l'historique (CSV)</button></div>
+  </section>
+
+  <section class="card">
+    <details id="setDetails">
+      <summary>Réglages</summary>
+      <div class="form" style="margin-top:10px">
+        <label class="f" for="oDiam">Diamètre du disque (cm)<input id="oDiam" inputmode="decimal"></label>
+        <label class="f" for="oMark">Diamètre de la pastille (cm)<input id="oMark" inputmode="decimal"></label>
+        <label class="f" for="oRom">Amplitude mini d'une rep (cm)<input id="oRom" inputmode="decimal"></label>
+        <label class="f" for="oTol">Tolérance couleur<input id="oTol" type="range" min="6" max="40" step="1"></label>
+        <label class="f" for="oRes">Résolution d'analyse<select id="oRes"><option value="320">320 px (rapide)</option><option value="480">480 px</option><option value="640">640 px (précis)</option></select></label>
+        <label class="f" for="oFps">Images / seconde demandées<select id="oFps"><option value="30">30</option><option value="60">60</option></select></label>
+        <label class="f" for="oStop">Arrêt auto sans mouvement (s)<input id="oStop" inputmode="numeric"></label>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px">
+        <label class="c" for="oBeep"><input type="checkbox" id="oBeep"> Bip à chaque rep</label>
+        <label class="c" for="oMask"><input type="checkbox" id="oMask"> Afficher les pixels détectés (réglage)</label>
+        <label class="c" for="oTorch"><input type="checkbox" id="oTorch"> Lampe (Android, si disponible)</label>
+      </div>
+      <p class="note" style="margin-top:10px" id="calInfo"></p>
+    </details>
+  </section>
+
+  <section class="card">
+    <details>
+      <summary>Mode d'emploi et limites</summary>
+      <div class="note" style="display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:13px">
+        <p><b>Installation au rack.</b> Pastille ronde de couleur vive (rose, vert, orange fluo, 4–6 cm) au centre du disque extérieur. Téléphone fixe, perpendiculaire à la barre, objectif à hauteur des disques, à 1,5–3 m. Tout le trajet de la barre doit rester dans l'image.</p>
+        <p><b>Calibrage.</b> « Calibrer sur le disque » : touchez le bord haut puis le bord bas du disque (45 cm pour un disque olympique de 20/25 kg). C'est la méthode la plus précise. « Calibrer sur la pastille » utilise la taille de la pastille, plus rapide mais moins précis. À refaire si vous déplacez le téléphone.</p>
+        <p><b>Mesures.</b> Une rep = une montée d'au moins l'amplitude minimale. Vitesse moyenne concentrique = amplitude ÷ durée de la montée ; vitesse maximale = pic de la vitesse lissée ; perte de vitesse = (meilleure − dernière) ÷ meilleure.</p>
+        <p><b>Limites.</b> La mesure suppose que la barre se déplace dans un plan parallèle au téléphone : si elle se rapproche ou s'éloigne de la caméra, la mesure est faussée (l'appli le signale quand la taille apparente de la pastille varie). À 30 images/s, la vitesse moyenne reste correcte mais la vitesse maximale et les mouvements très rapides sont moins précis. Ordre de grandeur attendu : 5–10 % d'écart avec un capteur linéaire.</p>
+      </div>
+    </details>
+  </section>
+</div>
+<datalist id="exl"><option>Back squat</option><option>Front squat</option><option>Box squat</option><option>Développé couché</option><option>Soulevé de terre</option><option>Trap bar deadlift</option><option>RDL</option><option>Tirage planche</option><option>Hip thrust</option><option>CMJ barre</option></datalist>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const LS = 'vitesse-barre-v1';
+const fmt = (x, d=2) => (x == null || !isFinite(x)) ? '–' : x.toLocaleString('fr-FR', {minimumFractionDigits:d, maximumFractionDigits:d});
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const num = v => { const x = parseFloat(String(v ?? '').replace(',', '.')); return isFinite(x) ? x : NaN; };
+
+/* ---------- réglages persistants ---------- */
+const DEF = {diam:45, mark:5, rom:15, tol:18, res:480, fps:60, stop:6, beep:true, mask:false, target:null, mPerPx:null, calMode:null};
+const O = {...DEF};
+let HIST = [];
+try{ Object.assign(O, JSON.parse(localStorage.getItem(LS + '-opt') || '{}')); HIST = JSON.parse(localStorage.getItem(LS + '-hist') || '[]'); }catch(e){}
+const saveO = () => { try{ localStorage.setItem(LS + '-opt', JSON.stringify(O)); }catch(e){} };
+const saveH = () => { try{ localStorage.setItem(LS + '-hist', JSON.stringify(HIST)); }catch(e){ setStatus('Stockage plein : exportez puis videz l\'historique'); } };
+
+/* ---------- état ---------- */
+const S = { stream:null, track:null, vw:0, vh:0, stage:'off', calPts:[], areas:[], samples:[], rec:false, t0:null,
+  last:null, blobR:4, lostN:0, frames:0, fpsT:[], lastAnalysis:null, repsSeen:0, lastMoveT:0, wake:null, audio:null, maskImg:null, res:null };
+const video = $('#video'), ov = $('#ov'), octx = ov.getContext('2d');
+const proc = document.createElement('canvas'), pctx = proc.getContext('2d', {willReadFrequently:true});
+
+function setStatus(t){ $('#status').textContent = t; }
+function hint(t){ $('#hint').innerHTML = t; }
+function steps(){
+  const done = {cam: !!S.stream, pick: !!O.target, calib: !!O.mPerPx, rec: !!S.res};
+  document.querySelectorAll('.step').forEach(el => { const k = el.dataset.st; el.classList.toggle('ok', !!done[k]); el.classList.toggle('on', S.stage === k || (S.stage.startsWith('cal') && k === 'calib')); });
+  $('#bPick').disabled = !S.stream || S.rec; $('#bCal').disabled = !S.stream || S.rec; $('#bCalAuto').disabled = !S.stream || !O.target || S.rec;
+  $('#bRec').disabled = !S.stream || !O.target || !O.mPerPx;
+  $('#bRec').textContent = S.rec ? 'Arrêter la série' : 'Démarrer la série'; $('#bRec').className = S.rec ? 'rec' : 'primary';
+  $('#bCam').textContent = S.stream ? 'Éteindre la caméra' : 'Allumer la caméra'; $('#bCam').className = S.stream ? '' : 'primary';
+  $('#calInfo').innerHTML = O.mPerPx ? `Calibrage actuel : ${fmt(O.mPerPx*1000, 3)} mm par pixel vidéo (${O.calMode === 'plate' ? 'sur le disque' : 'sur la pastille'}).` : 'Pas encore de calibrage.';
+}
+
+/* ---------- caméra ---------- */
+async function startCam(){
+  try{
+    const st = await navigator.mediaDevices.getUserMedia({audio:false, video:{facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720}, frameRate:{ideal:+O.fps}}});
+    S.stream = st; S.track = st.getVideoTracks()[0]; video.srcObject = st; await video.play();
+    await new Promise(r => video.videoWidth ? r() : video.addEventListener('loadedmetadata', r, {once:true}));
+    S.vw = video.videoWidth; S.vh = video.videoHeight;
+    $('#stage').style.aspectRatio = `${S.vw}/${S.vh}`; fitStage(); $('#ph').hidden = true;
+    const set = S.track.getSettings ? S.track.getSettings() : {};
+    setStatus(`${S.vw}×${S.vh} · ${set.frameRate ? Math.round(set.frameRate) + ' i/s' : ''}`);
+    try{ S.wake = await navigator.wakeLock.request('screen'); }catch(e){}
+    applyTorch();
+    S.stage = O.target ? (O.mPerPx ? 'rec' : 'calib') : 'pick';
+    hint(!O.target ? 'Touchez « Cibler la pastille », puis touchez la pastille sur l\'image.' : !O.mPerPx ? 'Pastille mémorisée. Calibrez : touchez « Calibrer sur le disque ».' : 'Prêt. Vérifiez que la pastille est suivie (cercle bleu), puis « Démarrer la série ».');
+    loop(); steps();
+  }catch(e){
+    setStatus('Caméra refusée');
+    hint(`Impossible d'ouvrir la caméra (${esc(e.name || e.message)}). Autorisez la caméra pour ce site dans les réglages du navigateur. L'appli doit être ouverte en https.`);
+  }
+}
+function stopCam(){
+  if (S.rec) stopRec();
+  if (S.stream) S.stream.getTracks().forEach(t => t.stop());
+  S.stream = null; S.track = null; video.srcObject = null; $('#ph').hidden = false; S.stage = 'off';
+  try{ S.wake && S.wake.release(); }catch(e){} S.wake = null;
+  octx.clearRect(0, 0, ov.width, ov.height); setStatus('Caméra éteinte'); hint('Touchez « Allumer la caméra ».'); steps();
+}
+async function applyTorch(){ try{ if (S.track && S.track.getCapabilities && S.track.getCapabilities().torch) await S.track.applyConstraints({advanced:[{torch: !!O.torch}]}); }catch(e){} }
+function fitStage(){
+  const st = $('#stage'); if (!S.vw) return;
+  const maxH = Math.min(window.innerHeight * 0.58, 720), w = st.parentElement.clientWidth;
+  const h = w * S.vh / S.vw; st.style.width = (h > maxH ? maxH * S.vw / S.vh : w) + 'px';
+  const r = st.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+  ov.width = Math.round(r.width * dpr); ov.height = Math.round(r.height * dpr);
+}
+window.addEventListener('resize', () => setTimeout(fitStage, 100));
+
+/* ---------- couleur ---------- */
+function rgb2hsv(r, g, b){
+  r /= 255; g /= 255; b /= 255; const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  let h = 0; if (d){ if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4; h *= 60; if (h < 0) h += 360; }
+  return [h, mx ? d / mx : 0, mx];
+}
+function matcher(){
+  const t = O.target; if (!t) return null;
+  const tolH = +O.tol, minS = Math.max(0.22, t.s * 0.45), minV = Math.max(0.18, t.v * 0.35);
+  return (r, g, b) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; if (!mx) return false;
+    const v = mx / 255, s = d / mx; if (s < minS || v < minV) return false;
+    let h; if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4; h *= 60; if (h < 0) h += 360;
+    let dh = Math.abs(h - t.h); if (dh > 180) dh = 360 - dh; return dh <= tolH; };
+}
+
+/* ---------- boucle de suivi ---------- */
+let rvfc = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
+function loop(){
+  if (!S.stream) return;
+  const step = (now, meta) => { if (!S.stream) return; frame(meta && meta.mediaTime != null ? meta.mediaTime : performance.now()/1000); schedule(); };
+  const schedule = () => rvfc ? video.requestVideoFrameCallback(step) : requestAnimationFrame(t => step(t, null));
+  schedule();
+}
+function frame(t){
+  if (!S.vw || video.readyState < 2) return;
+  const pw = +O.res, ph = Math.round(pw * S.vh / S.vw);
+  if (proc.width !== pw || proc.height !== ph){ proc.width = pw; proc.height = ph; S.last = null; }
+  pctx.drawImage(video, 0, 0, pw, ph);
+  const kx = S.vw / pw;
+  let det = null;
+  if (O.target){ const img = pctx.getImageData(0, 0, pw, ph); det = track(img, pw, ph); }
+  S.fpsT.push(t); while (S.fpsT.length > 30) S.fpsT.shift();
+  if (det){
+    const s = {t, x: det.x * kx, y: det.y * kx, a: det.n * kx * kx};
+    if (S.stage === 'calauto'){ S.areas.push(s.a); if (S.areas.length >= 20) finishAutoCal(); }
+    if (S.rec){ if (S.t0 == null) S.t0 = t; S.samples.push({t: t - S.t0, x: s.x, y: s.y, a: s.a}); }
+  } else if (S.rec){ if (S.t0 == null) S.t0 = t; S.samples.push({t: t - S.t0, x: NaN, y: NaN, a: NaN}); }
+  S.frames++;
+  if (S.rec && S.frames % 6 === 0) liveUpdate();
+  draw(det, kx);
+}
+function track(img, pw, ph){
+  const m = matcher(), d = img.data;
+  const mask = O.mask ? (S.maskImg && S.maskImg.width === pw ? S.maskImg : (S.maskImg = new ImageData(pw, ph))) : null;
+  if (mask) mask.data.fill(0);
+  const scan = (x0, y0, x1, y1, step) => { let sx = 0, sy = 0, n = 0;
+    for (let y = Math.max(0, y0); y < Math.min(ph, y1); y += step) for (let x = Math.max(0, x0); x < Math.min(pw, x1); x += step){
+      const i = (y * pw + x) * 4; if (m(d[i], d[i+1], d[i+2])){ sx += x; sy += y; n++; if (mask){ mask.data[i] = 255; mask.data[i+1] = 0; mask.data[i+2] = 255; mask.data[i+3] = 170; } } }
+    return {sx, sy, n}; };
+  let cx, cy;
+  if (S.last && S.lostN < 8){ cx = S.last.x; cy = S.last.y; }
+  else { // recherche grossière : cellule la plus dense
+    const C = 8; let best = 0, bx = -1, by = -1;
+    for (let gy = 0; gy < ph; gy += C) for (let gx = 0; gx < pw; gx += C){
+      let n = 0; for (let y = gy; y < Math.min(ph, gy + C); y += 2) for (let x = gx; x < Math.min(pw, gx + C); x += 2){ const i = (y * pw + x) * 4; if (m(d[i], d[i+1], d[i+2])) n++; }
+      if (n > best){ best = n; bx = gx + C/2; by = gy + C/2; } }
+    if (best < 3){ S.lostN++; return null; } cx = bx; cy = by;
+  }
+  const R1 = Math.max(14, S.blobR * 4);
+  let r = scan(Math.floor(cx - R1), Math.floor(cy - R1), Math.ceil(cx + R1), Math.ceil(cy + R1), 1);
+  if (r.n < 5){ S.lostN++; if (S.lostN >= 8) S.last = null; return null; }
+  let x = r.sx / r.n, y = r.sy / r.n;
+  const R2 = Math.max(6, Math.sqrt(r.n / Math.PI) * 1.8); // affinage autour du centre pour écarter des pixels parasites
+  if (mask) mask.data.fill(0);
+  r = scan(Math.floor(x - R2), Math.floor(y - R2), Math.ceil(x + R2), Math.ceil(y + R2), 1);
+  if (r.n < 5){ S.lostN++; return null; }
+  x = r.sx / r.n; y = r.sy / r.n;
+  S.blobR = Math.sqrt(r.n / Math.PI); S.last = {x, y}; S.lostN = 0;
+  return {x, y, n: r.n};
+}
+function draw(det, kx){
+  const W = ov.width, H = ov.height, sx = W / S.vw; octx.clearRect(0, 0, W, H);
+  if (O.mask && S.maskImg){ const tmp = draw.tmp || (draw.tmp = document.createElement('canvas')); tmp.width = S.maskImg.width; tmp.height = S.maskImg.height; tmp.getContext('2d').putImageData(S.maskImg, 0, 0); octx.imageSmoothingEnabled = false; octx.drawImage(tmp, 0, 0, W, H); }
+  const lw = Math.max(2, W / 400);
+  if (S.calPts.length){ octx.fillStyle = '#f0a83a'; octx.strokeStyle = '#f0a83a'; octx.lineWidth = lw;
+    S.calPts.forEach(p => { octx.beginPath(); octx.arc(p.x * sx, p.y * sx, lw * 4, 0, 7); octx.fill(); });
+    if (S.calPts.length === 2){ octx.beginPath(); octx.moveTo(S.calPts[0].x * sx, S.calPts[0].y * sx); octx.lineTo(S.calPts[1].x * sx, S.calPts[1].y * sx); octx.stroke(); } }
+  // trajectoire récente
+  if (S.rec && S.samples.length > 2){ octx.strokeStyle = 'rgba(56,214,242,.8)'; octx.lineWidth = lw; octx.beginPath(); let st = false;
+    for (let i = Math.max(0, S.samples.length - 240); i < S.samples.length; i++){ const p = S.samples[i]; if (!isFinite(p.x)){ st = false; continue; } if (!st){ octx.moveTo(p.x * sx, p.y * sx); st = true; } else octx.lineTo(p.x * sx, p.y * sx); } octx.stroke(); }
+  if (det){ octx.strokeStyle = '#38d6f2'; octx.lineWidth = lw * 1.5; octx.beginPath(); octx.arc(det.x * kx * sx, det.y * kx * sx, Math.max(lw * 5, S.blobR * kx * sx * 1.4), 0, 7); octx.stroke();
+    octx.beginPath(); octx.moveTo(det.x * kx * sx - lw * 6, det.y * kx * sx); octx.lineTo(det.x * kx * sx + lw * 6, det.y * kx * sx); octx.moveTo(det.x * kx * sx, det.y * kx * sx - lw * 6); octx.lineTo(det.x * kx * sx, det.y * kx * sx + lw * 6); octx.stroke(); }
+  else if (O.target && S.stage !== 'pick'){ octx.fillStyle = 'rgba(239,111,94,.9)'; octx.font = `${Math.round(14 * W / 600)}px system-ui`; octx.fillText('Pastille non trouvée', 12, 24 * W / 600); }
+}
+
+/* ---------- interactions sur l'image ---------- */
+ov.addEventListener('pointerdown', ev => {
+  if (!S.stream) return;
+  const r = ov.getBoundingClientRect(); const fx = (ev.clientX - r.left) / r.width, fy = (ev.clientY - r.top) / r.height;
+  const vx = fx * S.vw, vy = fy * S.vh;
+  if (S.stage === 'pick'){
+    const pw = proc.width, ph = proc.height; pctx.drawImage(video, 0, 0, pw, ph);
+    const px = Math.round(fx * pw), py = Math.round(fy * ph); const d = pctx.getImageData(Math.max(0, px - 2), Math.max(0, py - 2), 5, 5).data;
+    let r0 = 0, g0 = 0, b0 = 0; for (let i = 0; i < d.length; i += 4){ r0 += d[i]; g0 += d[i+1]; b0 += d[i+2]; } const n = d.length / 4;
+    const [h, s, v] = rgb2hsv(r0/n, g0/n, b0/n);
+    O.target = {h, s, v, rgb:[Math.round(r0/n), Math.round(g0/n), Math.round(b0/n)]}; saveO(); S.last = {x: px, y: py}; S.lostN = 0;
+    if (s < 0.3) hint(`<span class="swatch" style="background:rgb(${O.target.rgb})"></span>Couleur peu saturée : le suivi risque de décrocher. Utilisez une pastille plus vive, ou augmentez la tolérance dans les réglages.`);
+    else hint(`<span class="swatch" style="background:rgb(${O.target.rgb})"></span>Pastille mémorisée. ${O.mPerPx ? 'Prêt : « Démarrer la série ».' : 'Calibrez maintenant : « Calibrer sur le disque ».'}`);
+    S.stage = O.mPerPx ? 'rec' : 'calib'; steps(); return;
+  }
+  if (S.stage === 'cal1'){ S.calPts = [{x: vx, y: vy}]; S.stage = 'cal2'; hint('Touchez maintenant le <b>bord bas</b> du disque.'); steps(); return; }
+  if (S.stage === 'cal2'){ S.calPts.push({x: vx, y: vy}); const dpx = Math.hypot(S.calPts[1].x - S.calPts[0].x, S.calPts[1].y - S.calPts[0].y);
+    if (dpx < 20){ hint('Les deux points sont trop proches : recommencez « Calibrer sur le disque ».'); S.stage = 'calib'; S.calPts = []; steps(); return; }
+    O.mPerPx = (num(O.diam) / 100) / dpx; O.calMode = 'plate'; saveO();
+    hint(`Calibré : disque de ${fmt(num(O.diam), 0)} cm = ${Math.round(dpx)} px. ${O.target ? 'Prêt : « Démarrer la série ».' : 'Ciblez la pastille.'}`);
+    S.stage = O.target ? 'rec' : 'pick'; setTimeout(() => { S.calPts = []; }, 2500); steps(); return; }
+});
+function finishAutoCal(){
+  const a = [...S.areas].sort((x, y) => x - y); const med = a[Math.floor(a.length / 2)];
+  const dpx = 2 * Math.sqrt(med / Math.PI); O.mPerPx = (num(O.mark) / 100) / dpx; O.calMode = 'marker'; saveO(); S.areas = [];
+  S.stage = 'rec'; hint(`Calibré sur la pastille : ${fmt(num(O.mark), 1)} cm ≈ ${fmt(dpx, 1)} px. Moins précis que le disque ; vérifiez l'amplitude obtenue sur une première rep.`); steps();
+}
+
+/* ---------- enregistrement ---------- */
+function beep(f = 880, d = 0.07){
+  if (!O.beep) return; try{ const A = S.audio || (S.audio = new (window.AudioContext || window.webkitAudioContext)()); const o = A.createOscillator(), g = A.createGain();
+    o.frequency.value = f; g.gain.value = 0.15; o.connect(g); g.connect(A.destination); o.start(); o.stop(A.currentTime + d); }catch(e){} }
+function startRec(){
+  S.samples = []; S.t0 = null; S.rec = true; S.repsSeen = 0; S.lastMoveT = 0; S.res = null; $('#res').hidden = true;
+  $('#mReps').textContent = '0'; $('#mV').textContent = '–'; $('#mVL').textContent = '–'; $('#mVL').classList.remove('bad');
+  beep(660, 0.12); hint('Mesure en cours… Faites vos reps. La série s\'arrête seule après ' + O.stop + ' s sans mouvement, ou touchez « Arrêter la série ».'); steps();
+}
+function stopRec(){
+  S.rec = false; const res = analyze(S.samples, O.mPerPx, num(O.rom) / 100); S.res = res; beep(440, 0.2);
+  showResults(res); hint(res.reps.length ? `${res.reps.length} rep${res.reps.length > 1 ? 's' : ''} détectée${res.reps.length > 1 ? 's' : ''}. Renseignez le mouvement et la charge, puis enregistrez.` : 'Aucune rep détectée : vérifiez que la pastille est suivie pendant tout le mouvement et que l\'amplitude minimale n\'est pas trop élevée.'); steps();
+}
+function liveUpdate(){
+  const res = analyze(S.samples, O.mPerPx, num(O.rom) / 100, true); S.lastAnalysis = res;
+  const n = res.reps.length;
+  if (n > S.repsSeen){ S.repsSeen = n; beep(); }
+  $('#mReps').textContent = n;
+  if (n){ const last = res.reps[n - 1]; $('#mV').textContent = fmt(last.mcv); $('#mVL').textContent = res.vl != null ? Math.round(res.vl) + '%' : '–'; $('#mVL').classList.toggle('bad', res.vl >= 20); }
+  const tNow = S.samples.length ? S.samples[S.samples.length - 1].t : 0;
+  if (res.lastMove != null) S.lastMoveT = res.lastMove;
+  if (n && tNow - S.lastMoveT > num(O.stop)) stopRec();
+  const fps = S.fpsT.length > 2 ? (S.fpsT.length - 1) / (S.fpsT[S.fpsT.length - 1] - S.fpsT[0]) : 0; setStatus(`${Math.round(fps)} i/s · ${fmt(tNow, 1)} s`);
+}
+
+/* ---------- analyse ---------- */
+function analyze(raw, mpp, minRom, live){
+  const out = {reps: [], vl: null, quality: {}, series: null, lastMove: null};
+  if (!mpp || raw.length < 5) return out;
+  // 1. points valides, interpolation des trous courts (< 0,2 s)
+  const P = []; let gap = [];
+  for (const s of raw){
+    if (isFinite(s.y)){ if (gap.length && P.length){ const a = P[P.length - 1]; const dt = s.t - a.t; if (dt < 0.2) gap.forEach(g => P.push({t: g.t, x: a.x + (s.x - a.x) * (g.t - a.t) / dt, y: a.y + (s.y - a.y) * (g.t - a.t) / dt, a: NaN, interp: true})); }
+      gap = []; P.push({t: s.t, x: s.x, y: s.y, a: s.a}); }
+    else gap.push(s);
+  }
+  if (P.length < 5) return out;
+  const y0 = P[0].y, x0 = P[0].x;
+  const T = P.map(p => p.t), Y = P.map(p => (y0 - p.y) * mpp), X = P.map(p => (p.x - x0) * mpp);
+  // 2. lissage (moyenne glissante centrée ±50 ms) puis vitesse par différence centrée, relissée ±40 ms
+  const smooth = (A, h) => A.map((_, i) => { let s = 0, n = 0; for (let j = i; j >= 0 && T[i] - T[j] <= h; j--){ s += A[j]; n++; } for (let j = i + 1; j < A.length && T[j] - T[i] <= h; j++){ s += A[j]; n++; } return s / n; });
+  const Ys = smooth(Y, 0.05);
+  const V0 = Ys.map((_, i) => { const a = Math.max(0, i - 1), b = Math.min(Ys.length - 1, i + 1); return T[b] > T[a] ? (Ys[b] - Ys[a]) / (T[b] - T[a]) : 0; });
+  const V = smooth(V0, 0.04);
+  // 3. extrema avec hystérésis = amplitude minimale (zigzag)
+  const ext = []; let dir = 0, iMin = 0, iMax = 0;
+  for (let i = 1; i < Ys.length; i++){
+    if (Ys[i] > Ys[iMax]) iMax = i; if (Ys[i] < Ys[iMin]) iMin = i;
+    if (dir >= 0 && Ys[iMax] - Ys[i] >= minRom){ if (dir === 0) ext.push({i: iMin, k: 'min'}); ext.push({i: iMax, k: 'max'}); dir = -1; iMin = i; }
+    else if (dir <= 0 && Ys[i] - Ys[iMin] >= minRom){ if (dir === 0) ext.push({i: iMax, k: 'max'}); ext.push({i: iMin, k: 'min'}); dir = 1; iMax = i; }
+  }
+  // dernière montée en cours : en direct on ne la compte qu'une fois la barre stabilisée en haut (vitesse ~0)
+  if (dir === 1 && Ys[iMax] - Ys[iMin] >= minRom){ const settled = Math.abs(V[V.length - 1]) < 0.05 && iMax < Ys.length - 1; if (!live || settled) ext.push({i: iMax, k: 'max'}); }
+  // 4. reps = montées min → max
+  for (let e = 1; e < ext.length; e++){
+    if (ext[e - 1].k !== 'min' || ext[e].k !== 'max') continue;
+    let a = ext[e - 1].i, b = ext[e].i;
+    // bornes affinées : début quand la vitesse dépasse 0,02 m/s, fin quand elle y repasse
+    while (a < b && V[a] < 0.02) a++; while (b > a && V[b] < 0.02) b--;
+    if (b <= a) continue;
+    const rom = Ys[b] - Ys[a], dur = T[b] - T[a]; if (rom < minRom * 0.9 || dur <= 0) continue;
+    let vp = 0, tp = T[a]; for (let i = a; i <= b; i++) if (V[i] > vp){ vp = V[i]; tp = T[i]; }
+    // excentrique précédente
+    let ecc = null; if (e >= 2 && ext[e - 2].k === 'max'){ let ea = ext[e - 2].i, eb = ext[e - 1].i; while (ea < eb && V[ea] > -0.02) ea++; while (eb > ea && V[eb] > -0.02) eb--; const er = Ys[ea] - Ys[eb], ed = T[eb] - T[ea]; if (ed > 0 && er > 0) ecc = {rom: er, dur: ed, mv: er / ed}; }
+    const xs = X.slice(a, b + 1); const drift = Math.max(...xs) - Math.min(...xs);
+    out.reps.push({n: out.reps.length + 1, t0: T[a], t1: T[b], rom, dur, mcv: rom / dur, vpk: vp, tpk: tp - T[a], ecc, drift});
+  }
+  if (out.reps.length >= 2){ const best = Math.max(...out.reps.map(r => r.mcv)), last = out.reps[out.reps.length - 1].mcv; out.vl = (best - last) / best * 100; }
+  // dernier instant de mouvement (|v| > 0,05 m/s)
+  for (let i = V.length - 1; i >= 0; i--) if (Math.abs(V[i]) > 0.05){ out.lastMove = T[i]; break; }
+  // qualité
+  const dur = raw.length > 1 ? raw[raw.length - 1].t - raw[0].t : 0; const lost = raw.filter(s => !isFinite(s.y)).length;
+  const A = raw.map(s => s.a).filter(isFinite).sort((a, b) => a - b); const q = p => A.length ? A[Math.floor(p * (A.length - 1))] : NaN;
+  out.quality = {fps: dur > 0 ? (raw.length - 1) / dur : 0, lostPct: raw.length ? lost / raw.length * 100 : 0, sizeVar: A.length ? (Math.sqrt(q(0.9)) - Math.sqrt(q(0.1))) / Math.sqrt(q(0.5)) * 100 : 0, dur};
+  if (!live) out.series = {T, Y: Ys, V, X};
+  return out;
+}
+
+/* ---------- affichage des résultats ---------- */
+function showResults(res){
+  $('#res').hidden = false; const R = res.reps, q = res.quality;
+  $('#mReps').textContent = R.length; $('#mV').textContent = R.length ? fmt(R[R.length - 1].mcv) : '–'; $('#mVL').textContent = res.vl != null ? Math.round(res.vl) + '%' : '–'; $('#mVL').classList.toggle('bad', res.vl >= 20);
+  const warns = [];
+  if (q.fps && q.fps < 25) warns.push(`Seulement ${Math.round(q.fps)} images/s : vitesses maximales peu fiables.`);
+  if (q.lostPct > 10) warns.push(`Pastille perdue sur ${Math.round(q.lostPct)} % des images : améliorez l'éclairage ou la tolérance couleur.`);
+  if (q.sizeVar > 15) warns.push(`La taille apparente de la pastille a varié de ${Math.round(q.sizeVar)} % : la barre s'est probablement rapprochée ou éloignée du téléphone, les mesures sont faussées.`);
+  $('#quality').innerHTML = `<p class="note">${fmt(q.dur, 1)} s enregistrées · ${Math.round(q.fps)} images/s · pastille suivie sur ${Math.round(100 - q.lostPct)} % des images.</p>` + warns.map(w => `<p class="warn">${esc(w)}</p>`).join('');
+  const best = R.length ? Math.max(...R.map(r => r.mcv)) : 0;
+  $('#tReps').innerHTML = R.length ? `<thead><tr><th>Rep</th><th>Ampl. cm</th><th>V moy m/s</th><th>V max m/s</th><th>Montée s</th><th>Perte</th></tr></thead><tbody>${R.map(r => `<tr class="${r.mcv === best ? 'best' : ''}"><td>${r.n}</td><td>${fmt(r.rom * 100, 1)}</td><td>${fmt(r.mcv)}</td><td>${fmt(r.vpk)}</td><td>${fmt(r.dur)}</td><td>${best ? Math.round((best - r.mcv) / best * 100) + ' %' : ''}</td></tr>`).join('')}</tbody>` : '';
+  drawV(R); drawP(res);
+}
+function drawV(R){
+  const el = $('#cV'); if (!R.length){ el.innerHTML = ''; return; }
+  const W = Math.max(300, el.clientWidth || 600), H = 170, m = {l: 40, r: 10, t: 16, b: 24}, pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const mx = Math.max(0.2, ...R.map(r => r.mcv)) * 1.15, y = v => m.t + ph - v / mx * ph, bw = Math.min(46, pw / R.length * 0.6);
+  let g = ''; const st = mx > 1 ? 0.25 : 0.1; for (let v = 0; v <= mx; v += st) g += `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}"/><text class="ax" x="${m.l - 5}" y="${y(v) + 4}" text-anchor="end">${fmt(v, st < 0.2 ? 1 : 2)}</text>`;
+  R.forEach((r, i) => { const cx = m.l + pw / R.length * (i + 0.5); g += `<rect class="bar" x="${cx - bw / 2}" y="${y(r.mcv)}" width="${bw}" height="${y(0) - y(r.mcv)}" rx="3"/><text class="lab" x="${cx}" y="${y(r.mcv) - 4}" text-anchor="middle">${fmt(r.mcv)}</text><text class="ax" x="${cx}" y="${H - 6}" text-anchor="middle">${r.n}</text>`; });
+  el.innerHTML = `<p class="note">Vitesse moyenne concentrique par rep (m/s)</p><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Vitesse moyenne par rep">${g}</svg>`;
+}
+function drawP(res){
+  const el = $('#cP'); const s = res.series; if (!s || s.T.length < 3){ el.innerHTML = ''; return; }
+  const W = Math.max(300, el.clientWidth || 600), H = 170, m = {l: 40, r: 10, t: 10, b: 24}, pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const t1 = s.T[s.T.length - 1] || 1, lo = Math.min(...s.Y), hi = Math.max(...s.Y), span = Math.max(0.1, hi - lo);
+  const X = t => m.l + t / t1 * pw, Yp = v => m.t + ph - (v - lo) / span * ph;
+  let g = ''; res.reps.forEach(r => g += `<rect class="rep" x="${X(r.t0)}" y="${m.t}" width="${Math.max(1, X(r.t1) - X(r.t0))}" height="${ph}"/>`);
+  g += `<path class="pos" d="${s.T.map((t, i) => `${i ? 'L' : 'M'}${X(t).toFixed(1)},${Yp(s.Y[i]).toFixed(1)}`).join(' ')}"/>`;
+  for (let k = 0; k <= 4; k++){ const t = t1 * k / 4; g += `<text class="ax" x="${X(t)}" y="${H - 6}" text-anchor="middle">${fmt(t, 0)} s</text>`; }
+  g += `<text class="ax" x="${m.l - 5}" y="${Yp(hi) + 4}" text-anchor="end">${fmt((hi - lo) * 100, 0)}</text><text class="ax" x="${m.l - 5}" y="${Yp(lo)}" text-anchor="end">0</text>`;
+  el.innerHTML = `<p class="note">Hauteur de la barre (cm) ; zones orangées : montées comptées comme reps</p><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Trajectoire verticale">${g}</svg>`;
+}
+
+/* ---------- historique et exports ---------- */
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+function renderHist(){
+  $('#hist').innerHTML = HIST.length ? [...HIST].reverse().slice(0, 40).map(h => { const R = h.reps; const best = R.length ? Math.max(...R.map(r => r.mcv)) : 0;
+    return `<div class="h"><div><b>${esc(h.ex || 'Sans nom')}</b>${h.load ? ` · ${esc(h.load)} kg` : ''}<small>${esc(h.date)} ${esc(h.time || '')} · ${R.length} reps · meilleure ${fmt(best)} m/s · perte ${h.vl != null ? Math.round(h.vl) + ' %' : '–'}</small></div>
+      <span style="font-family:var(--mono)">${R.map(r => fmt(r.mcv)).join(' · ')}</span><button class="ghost" data-del="${h.id}" aria-label="Supprimer">✕</button></div>`; }).join('')
+    : '<p class="note">Les séries enregistrées apparaissent ici. Elles restent sur ce téléphone ; exportez-les en CSV pour les analyser.</p>';
+}
+function download(name, text){ const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + text], {type: 'text/csv'})); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); }
+const dec = v => (v == null || !isFinite(v)) ? '' : String(Math.round(v * 1000) / 1000).replace('.', ',');
+function exportHist(){
+  if (!HIST.length){ setStatus('Historique vide'); return; }
+  const L = [['Date','Heure','Mouvement','Charge kg','Rep','Amplitude cm','V moy concentrique m/s','V max m/s','Durée montée s','Temps au pic s','V moy excentrique m/s','Perte vs meilleure %','Perte série %','Images/s','Pastille perdue %','Variation taille pastille %','Calibrage'].join(';')];
+  HIST.forEach(h => { const best = Math.max(...h.reps.map(r => r.mcv)); h.reps.forEach(r => L.push([h.date, h.time || '', h.ex, String(h.load || '').replace('.', ','), r.n, dec(r.rom * 100), dec(r.mcv), dec(r.vpk), dec(r.dur), dec(r.tpk), r.ecc ? dec(r.ecc.mv) : '', dec((best - r.mcv) / best * 100), dec(h.vl), dec(h.q.fps), dec(h.q.lostPct), dec(h.q.sizeVar), h.cal].map(v => /[;"\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v).join(';'))); });
+  download(`vitesse-barre_${today()}.csv`, L.join('\r\n'));
+}
+function exportRaw(){
+  const s = S.res && S.res.series; if (!s){ setStatus('Pas de trajectoire à exporter'); return; }
+  const L = ['t s;hauteur m;vitesse m/s;horizontal m']; s.T.forEach((t, i) => L.push([dec(t), dec(s.Y[i]), dec(s.V[i]), dec(s.X[i])].join(';')));
+  download(`trajectoire_${today()}.csv`, L.join('\r\n'));
+}
+
+/* ---------- liaisons ---------- */
+$('#bCam').addEventListener('click', () => S.stream ? stopCam() : startCam());
+$('#bPick').addEventListener('click', () => { S.stage = 'pick'; S.last = null; hint('Touchez la <b>pastille</b> sur l\'image.'); steps(); });
+$('#bCal').addEventListener('click', () => { S.stage = 'cal1'; S.calPts = []; hint(`Touchez le <b>bord haut</b> du disque (diamètre réglé : ${fmt(num(O.diam), 0)} cm, modifiable dans les réglages).`); steps(); });
+$('#bCalAuto').addEventListener('click', () => { S.stage = 'calauto'; S.areas = []; hint(`Mesure de la pastille (${fmt(num(O.mark), 1)} cm) : gardez la barre immobile une seconde…`); steps(); });
+$('#bRec').addEventListener('click', () => { if (S.rec) stopRec(); else startRec(); });
+$('#bSave').addEventListener('click', () => {
+  if (!S.res || !S.res.reps.length){ setStatus('Aucune rep à enregistrer'); return; }
+  const d = new Date(); const h = {id: 'h' + Date.now().toString(36), date: today(), time: `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`,
+    ex: $('#sEx').value.trim(), load: $('#sLoad').value.trim(), reps: S.res.reps.map(r => ({n: r.n, rom: r.rom, mcv: r.mcv, vpk: r.vpk, dur: r.dur, tpk: r.tpk, ecc: r.ecc})),
+    vl: S.res.vl, q: S.res.quality, cal: O.calMode === 'plate' ? `disque ${O.diam} cm` : `pastille ${O.mark} cm`};
+  HIST.push(h); if (HIST.length > 500) HIST.shift(); saveH(); renderHist(); setStatus('Série enregistrée'); $('#bSave').disabled = true; setTimeout(() => $('#bSave').disabled = false, 1500);
+  try{ localStorage.setItem(LS + '-ex', h.ex); }catch(e){}
+});
+$('#bRaw').addEventListener('click', exportRaw);
+$('#bExp').addEventListener('click', exportHist);
+$('#hist').addEventListener('click', e => { const b = e.target.closest('[data-del]'); if (!b) return;
+  if (b.dataset.armed){ HIST = HIST.filter(h => h.id !== b.dataset.del); saveH(); renderHist(); }
+  else { b.dataset.armed = '1'; b.textContent = 'Confirmer'; b.style.color = 'var(--bad)'; setTimeout(() => { if (b.isConnected){ delete b.dataset.armed; b.textContent = '✕'; b.style.color = ''; } }, 3000); } });
+const bind = (id, key, conv = v => v) => { const el = $(id); if (el.type === 'checkbox') el.checked = !!O[key]; else el.value = O[key];
+  el.addEventListener(el.type === 'checkbox' || el.tagName === 'SELECT' ? 'change' : 'input', () => { O[key] = el.type === 'checkbox' ? el.checked : conv(el.value); saveO();
+    if (key === 'diam' || key === 'mark'){ O.mPerPx = null; saveO(); hint('Dimension modifiée : refaites le calibrage.'); steps(); }
+    if (key === 'torch') applyTorch(); if (key === 'res') S.last = null; if (key === 'fps' && S.stream){ stopCam(); startCam(); } }); };
+bind('#oDiam', 'diam'); bind('#oMark', 'mark'); bind('#oRom', 'rom'); bind('#oTol', 'tol'); bind('#oRes', 'res'); bind('#oFps', 'fps'); bind('#oStop', 'stop');
+bind('#oBeep', 'beep'); bind('#oMask', 'mask'); bind('#oTorch', 'torch');
+try{ $('#sEx').value = localStorage.getItem(LS + '-ex') || ''; }catch(e){}
+document.addEventListener('visibilitychange', async () => { if (document.visibilityState === 'visible' && S.stream && !S.wake){ try{ S.wake = await navigator.wakeLock.request('screen'); }catch(e){} } else if (document.visibilityState === 'hidden') S.wake = null; });
+if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ hint('Ce navigateur ne donne pas accès à la caméra. Ouvrez l\'appli en https dans Safari (iPhone) ou Chrome (Android).'); $('#bCam').disabled = true; }
+renderHist(); steps();
+window.__vb = {analyze, S, O}; // accès pour les tests
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>
