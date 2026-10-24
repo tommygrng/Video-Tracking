@@ -42,6 +42,9 @@ header{display:flex;align-items:center;gap:10px}
 .stage{position:relative;background:#000;border-radius:12px;overflow:hidden;width:100%;max-width:100%;touch-action:manipulation}
 .stage video,.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .stage video{object-fit:fill}
+.stage canvas#loupe{inset:auto;top:8px;left:8px;width:150px;height:150px;border-radius:50%;border:2px solid #f0a83a;box-shadow:0 2px 10px rgba(0,0,0,.6);pointer-events:none}
+.stage canvas#loupe.right{left:auto;right:8px}
+.stage.calib{touch-action:none}
 .stage .placeholder{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:20px;color:var(--muted)}
 .steps{display:flex;gap:6px;flex-wrap:wrap}
 .step{font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
@@ -93,6 +96,11 @@ details.valid summary{margin-bottom:4px}
 .dpos{color:var(--good)} .dneg{color:var(--bad)}
 .swatch{display:inline-block;width:16px;height:16px;border-radius:50%;vertical-align:middle;border:1px solid var(--line);margin-right:6px}
 @media (min-width:760px){.big b{font-size:60px}}
+/* mode intégré dans Planif Muscu */
+body.embed .noembed{display:none!important}
+body.embed .brand{font-size:20px}
+.ctx{font-size:13px;color:var(--muted);margin:-4px 0 0}
+#bSend{min-height:48px;font-size:16px}
 </style>
 </head>
 <body>
@@ -100,7 +108,9 @@ details.valid summary{margin-bottom:4px}
   <header>
     <div class="brand">Vitesse <span>Barre</span></div>
     <div class="status" id="status">Caméra éteinte</div>
+    <button id="bClose" hidden>Fermer</button>
   </header>
+  <p class="ctx" id="ctx" hidden></p>
 
   <div class="steps" id="steps">
     <span class="step" data-st="cam">1 · Caméra</span>
@@ -112,6 +122,7 @@ details.valid summary{margin-bottom:4px}
   <div class="stagebox"><div class="stage" id="stage" style="aspect-ratio:16/9">
     <video id="video" playsinline muted autoplay></video>
     <canvas id="ov"></canvas>
+    <canvas id="loupe" width="300" height="300" hidden></canvas>
     <div class="placeholder" id="ph">Posez le téléphone de profil, à hauteur des disques, à 1,5–3 m de la barre.<br>Suivez un disque de couleur (vert, bleu, rouge, jaune…) ou une pastille vive collée au centre d'un disque noir.</div>
   </div></div>
   <div class="seekrow" id="seekRow" hidden><span class="note" id="seekT">0,00 s</span><input type="range" id="seek" min="0" max="1" step="0.01" value="0" aria-label="Position dans la vidéo"><span class="note" id="fileName"></span></div>
@@ -133,8 +144,8 @@ details.valid summary{margin-bottom:4px}
   </div>
   <div class="adj" id="adjRow" hidden><span class="note">Ajuster le contour au bord du disque</span><button id="bAdjM" aria-label="Réduire le contour">−</button><button id="bAdjP" aria-label="Agrandir le contour">+</button><span class="note" id="adjInfo"></span></div>
   <div class="opts">
-    <label class="c" for="oVid"><input type="checkbox" id="oVid"> Filmer la série (mode essai, pour comparer à un appareil de référence)</label>
-    <button class="ghost" id="bFile">Analyser une vidéo enregistrée…</button>
+    <label class="c noembed" for="oVid"><input type="checkbox" id="oVid"> Filmer la série (mode essai, pour comparer à un appareil de référence)</label>
+    <button class="ghost noembed" id="bFile">Analyser une vidéo enregistrée…</button>
     <input type="file" id="fileIn" accept="video/*" hidden>
   </div>
 
@@ -144,11 +155,11 @@ details.valid summary{margin-bottom:4px}
     <div class="tablebox"><table id="tReps"></table></div>
     <div class="chart" id="cV"></div>
     <div class="chart" id="cP"></div>
-    <div class="form">
+    <div class="form noembed">
       <label class="f" for="sEx">Mouvement<input id="sEx" list="exl" placeholder="ex. Back squat"></label>
       <label class="f" for="sLoad">Charge (kg)<input id="sLoad" inputmode="decimal" placeholder="ex. 100"></label>
     </div>
-    <details class="valid" id="validBox">
+    <details class="valid noembed" id="validBox">
       <summary>Valeurs de l'appareil de référence</summary>
       <p class="note">Saisissez rep par rep les valeurs de votre appareil de référence (capteur linéaire, centrale inertielle…). Laissez vide une ligne si l'appareil n'a pas cette rep, et précisez-le dans le commentaire.</p>
       <label class="f" for="refDev">Appareil de référence<input id="refDev" placeholder="ex. GymAware, Vitruve, Enode…"></label>
@@ -157,7 +168,8 @@ details.valid summary{margin-bottom:4px}
       <p class="note" id="refSum"></p>
       <label class="f" for="sNote">Commentaire<input id="sNote" placeholder="ex. rep 3 non détectée par la référence, téléphone à 2 m"></label>
     </details>
-    <div class="actions">
+    <button class="primary" id="bSend" hidden>Valider dans la séance</button>
+    <div class="actions noembed">
       <button class="primary" id="bSave">Enregistrer la série</button>
       <button id="bTrial">Télécharger l'essai (JSON)</button>
       <button id="bVid" hidden>Télécharger la vidéo</button>
@@ -166,7 +178,7 @@ details.valid summary{margin-bottom:4px}
     </div>
   </section>
 
-  <section class="card">
+  <section class="card noembed">
     <h2>Historique</h2>
     <div class="hist" id="hist"></div>
     <div class="actions"><button id="bExp">Exporter l'historique (CSV)</button></div>
@@ -202,9 +214,9 @@ details.valid summary{margin-bottom:4px}
       <div class="note" style="display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:13px">
         <p><b>Cible.</b> Avec un disque de couleur (bumper vert, bleu, rouge, jaune), touchez simplement le disque : l'appli suit le disque entier, puis « Calibrer automatiquement » mesure sa hauteur (45 cm par défaut). Avec des disques noirs ou gris, collez une pastille ronde de couleur vive (4–6 cm) au centre du disque extérieur.</p>
         <p><b>Installation au rack.</b> Téléphone fixe, perpendiculaire à la barre, objectif à hauteur des disques, à 1,5–3 m. Tout le trajet de la barre doit rester dans l'image.</p>
-        <p><b>Calibrage.</b> « Calibrer sur le disque » : touchez le bord haut puis le bord bas du disque (45 cm pour un disque olympique de 20/25 kg). C'est la méthode la plus précise. « Calibrer sur la pastille » utilise la taille de la pastille, plus rapide mais moins précis. À refaire si vous déplacez le téléphone.</p>
-        <p><b>Mesures.</b> Une rep = une montée d'au moins l'amplitude minimale. Vitesse moyenne concentrique = amplitude ÷ durée de la montée ; vitesse maximale = pic de la vitesse lissée ; perte de vitesse = (meilleure − dernière) ÷ meilleure.</p>
-        <p><b>Limites.</b> La mesure suppose que la barre se déplace dans un plan parallèle au téléphone : si elle se rapproche ou s'éloigne de la caméra, la mesure est faussée (l'appli le signale quand la taille apparente de la pastille varie). À 30 images/s, la vitesse moyenne reste correcte mais la vitesse maximale et les mouvements très rapides sont moins précis. Ordre de grandeur attendu : 5–10 % d'écart avec un capteur linéaire.</p>
+        <p><b>Calibrage (le plus important pour la précision).</b> « Calibrer sur le disque » : posez le doigt près du bord haut du disque, une loupe apparaît ; faites glisser jusqu'à ce que la croix soit pile sur le bord, relâchez ; idem pour le bord bas (45 cm pour un disque olympique). C'est la méthode la plus précise : 1 pixel d'erreur sur 200 ≈ 0,5 % sur la vitesse. Une fois le disque calibré à la main, le suivi ajuste un cercle de cette taille exacte sur le disque, ce qui ignore les disques voisins de même couleur. « Calibrer automatiquement » est plus rapide mais peut être trompé par un objet de même couleur qui touche le disque (l'appli le signale). Si le téléphone est rapproché ou éloigné ensuite, l'échelle est corrigée automatiquement (au-delà de 8 % d'écart).</p>
+        <p><b>Mesures.</b> Une rep = une montée d'au moins l'amplitude minimale. Vitesse moyenne concentrique = amplitude ÷ durée de la montée (début et fin de montée = vitesse à 3 % du pic, interpolés entre deux images) ; vitesse maximale = pic de la vitesse lissée ; perte de vitesse = (meilleure − dernière) ÷ meilleure.</p>
+        <p><b>Limites.</b> La mesure suppose que la barre se déplace dans un plan parallèle au téléphone : si elle se rapproche ou s'éloigne de la caméra, la mesure est faussée (l'appli le signale quand le disque paraît plus grand en bas qu'en haut du mouvement). À 30 images/s, la vitesse moyenne reste correcte mais la vitesse maximale et les mouvements très rapides sont moins précis. Ordre de grandeur attendu : 5–10 % d'écart avec un capteur linéaire.</p>
       </div>
     </details>
   </section>
@@ -216,6 +228,7 @@ details.valid summary{margin-bottom:4px}
 'use strict';
 const $ = s => document.querySelector(s);
 const LS = 'vitesse-barre-v1';
+const QS = new URLSearchParams(location.search), EMBED = QS.get('embed') === '1';
 const fmt = (x, d=2) => (x == null || !isFinite(x)) ? '–' : x.toLocaleString('fr-FR', {minimumFractionDigits:d, maximumFractionDigits:d});
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const num = v => { const x = parseFloat(String(v ?? '').replace(',', '.')); return isFinite(x) ? x : NaN; };
@@ -229,7 +242,7 @@ const saveO = () => { try{ localStorage.setItem(LS + '-opt', JSON.stringify(O));
 const saveH = () => { try{ localStorage.setItem(LS + '-hist', JSON.stringify(HIST)); }catch(e){ setStatus('Stockage plein : exportez puis videz l\'historique'); } };
 
 /* ---------- état ---------- */
-const S = { src:null, vidRec:null, vidChunks:[], vidBlob:null, vidMime:'', vidStartPerf:0, firstPerf:null, lastMT:-1, ref:[], savedId:null, stream:null, track:null, vw:0, vh:0, stage:'off', calPts:[], areas:[], samples:[], rec:false, t0:null,
+const S = { src:null, vidRec:null, vidChunks:[], vidBlob:null, vidMime:'', vidStartPerf:0, firstPerf:null, lastMT:-1, ref:[], savedId:null, stream:null, track:null, vw:0, vh:0, stage:'off', calPts:[], areas:[], extBuf:[], lp:null, samples:[], rec:false, t0:null,
   last:null, blobR:4, lostN:0, frames:0, fpsT:[], lastAnalysis:null, repsSeen:0, lastMoveT:0, wake:null, audio:null, maskImg:null, res:null };
 const video = $('#video'), ov = $('#ov'), octx = ov.getContext('2d');
 const proc = document.createElement('canvas'), pctx = proc.getContext('2d', {willReadFrequently:true});
@@ -238,13 +251,14 @@ const active = () => !!(S.stream || S.src === 'file');
 function setStatus(t){ $('#status').textContent = t; }
 function hint(t){ $('#hint').innerHTML = t; }
 function steps(){
+  $('#stage').classList.toggle('calib', S.stage === 'cal1' || S.stage === 'cal2');
   const done = {cam: !!S.stream, pick: !!O.target, calib: !!O.mPerPx, rec: !!S.res};
   document.querySelectorAll('.step').forEach(el => { const k = el.dataset.st; el.classList.toggle('ok', !!done[k]); el.classList.toggle('on', S.stage === k || (S.stage.startsWith('cal') && k === 'calib')); });
   $('#bPick').disabled = !active() || S.rec; $('#bCal').disabled = !active() || S.rec; $('#bCalAuto').disabled = !active() || !O.target || S.rec;
   $('#bRec').disabled = !active() || !O.target || !O.mPerPx;
   const isFile = S.src === 'file';
   $('#bRec').textContent = S.rec ? (isFile ? 'Arrêter l\'analyse' : 'Arrêter la série') : (isFile ? 'Analyser la vidéo' : 'Démarrer la série'); $('#bRec').className = S.rec ? 'rec' : 'primary';
-  $('#adjRow').hidden = !(O.calMode === 'plate-auto' && O.calDv) || S.rec; if (O.calDv) $('#adjInfo').textContent = `${Math.round(O.calDv)} px = ${fmt(num(O.diam), 0)} cm`;
+  $('#adjRow').hidden = !((O.calMode === 'plate-auto' || O.calMode === 'plate') && O.calDv) || S.rec; if (O.calDv) $('#adjInfo').textContent = `${Math.round(O.calDv)} px = ${fmt(num(O.diam), 0)} cm`;
   $('#seekRow').hidden = !isFile; $('#seek').disabled = S.rec; $('#oVid').disabled = isFile || S.rec;
   $('#bCam').textContent = S.stream ? 'Éteindre la caméra' : (isFile ? 'Revenir à la caméra' : 'Allumer la caméra'); $('#bCam').className = S.stream ? '' : 'primary';
   $('#calInfo').innerHTML = O.mPerPx ? `Calibrage actuel : ${fmt(O.mPerPx*1000, 3)} mm par pixel vidéo (${O.calMode === 'plate' ? 'touches sur le disque' : O.calMode === 'plate-auto' ? 'disque suivi, automatique' : 'sur la pastille'}).` : 'Pas encore de calibrage.';
@@ -336,6 +350,8 @@ function frame(t){
   if (det){
     const s = {t, x: det.x * kx, y: det.y * kx, a: det.n * kx * kx};
     S.isPlate = O.obj === 'plate' || (O.obj === 'auto' && det.big);
+    S.extBuf.push(det.ext * kx); if (S.extBuf.length > 30) S.extBuf.shift();
+    if (S.trackRef){ S.trackRef.push(det.ext * kx); if (S.trackRef.length >= 15){ const E = S.trackRef.sort((a, b) => a - b); O.calTrackPx = E[7]; S.trackRef = null; saveO(); } }
     if (S.stage === 'calauto'){ S.areas.push({a: s.a, ext: det.ext * kx, exth: det.exth * kx}); if (S.areas.length >= 20) finishAutoCal(); }
     if (S.rec){ if (S.t0 == null){ S.t0 = t; S.firstPerf = performance.now(); } S.samples.push({t: t - S.t0, x: s.x, y: s.y, a: s.a, e: det.ext * kx, h: det.exth * kx}); }
   } else if (S.rec){ if (S.t0 == null){ S.t0 = t; S.firstPerf = performance.now(); } S.samples.push({t: t - S.t0, x: NaN, y: NaN, a: NaN}); }
@@ -378,15 +394,47 @@ function track(img, pw, ph){
     if (best < Math.max(3, 0.25 * w * w)){ S.lostN++; return null; } c = {x: bx, y: by};
   }
   if (!S.D){ const b = blobAt(d, pw, ph, m, Math.round(c.x), Math.round(c.y)); if (!b || b.n < 6){ S.lostN++; return null; } S.D = Math.max(8, b.ev, b.eh); c = {x: b.x, y: b.y}; }
-  const D = S.D; let R = 0.65 * D, res = null;
-  for (let it = 0; it < 3; it++){
+  // Disque calibré à la main (taille exacte connue) : le centre est trouvé en ajustant un cercle de ce diamètre,
+  // qui doit être plein de la couleur cible à l'intérieur et vide juste à l'extérieur. Un disque voisin de même couleur
+  // (ex. le disque de l'autre côté de la barre, vu en perspective, qui bouge moins) ne peut plus tirer le centre vers lui.
+  const tight = (O.calMode === 'plate' || O.calMode === 'plate-auto') && O.calDv && O.Dvid && Math.abs(O.Dvid / O.calDv - 1) < 0.02;
+  const radii = tight ? [] : [0.65, 0.58, 0.58];
+  const D = S.D; let R = 0.58 * D, res = null;
+  const pass = (c, R) => {
     const x0 = Math.max(0, Math.floor(c.x - R)), x1 = Math.min(pw, Math.ceil(c.x + R)), y0 = Math.max(0, Math.floor(c.y - R)), y1 = Math.min(ph, Math.ceil(c.y + R)), R2 = R * R;
     let sx = 0, sy = 0, n = 0; const rows = new Float32Array(Math.max(1, y1 - y0)), cols = new Float32Array(Math.max(1, x1 - x0));
     for (let y = y0; y < y1; y++){ const dy2 = (y - c.y) * (y - c.y); if (dy2 > R2) continue;
       for (let x = x0; x < x1; x++){ if ((x - c.x) * (x - c.x) + dy2 > R2) continue; const i = (y * pw + x) * 4;
         if (m(d[i], d[i+1], d[i+2])){ sx += x; sy += y; n++; rows[y - y0]++; cols[x - x0]++; } } }
-    if (n < Math.max(6, 0.06 * Math.PI * D * D / 4)){ res = null; break; }
-    c = {x: sx / n, y: sy / n}; res = {n, rows, cols}; R = 0.58 * D;
+    return {sx, sy, n, rows, cols}; };
+  if (tight){
+    const r1 = D / 2, r2 = r1 + Math.max(2, 0.08 * D), SR = Math.max(9, Math.round(0.09 * D));
+    const x0 = Math.max(0, Math.floor(c.x - r2 - SR - 3)), x1 = Math.min(pw, Math.ceil(c.x + r2 + SR + 3)), y0 = Math.max(0, Math.floor(c.y - r2 - SR - 3)), y1 = Math.min(ph, Math.ceil(c.y + r2 + SR + 3));
+    const W = x1 - x0, H = y1 - y0;
+    if (W > 4 && H > 4){
+      const P = new Uint16Array(H * (W + 1)); // sommes cumulées par ligne du masque couleur
+      for (let y = 0; y < H; y++){ let acc = 0; const o = y * (W + 1); for (let x = 0; x < W; x++){ const i = ((y + y0) * pw + x + x0) * 4; if (m(d[i], d[i+1], d[i+2])) acc++; P[o + x + 1] = acc; } }
+      const disc = (cx, cy, r) => { let n = 0, a = 0;
+        for (let yy = Math.ceil(cy - r); yy <= Math.floor(cy + r); yy++){ const h = Math.sqrt(Math.max(0, r * r - (yy - cy) * (yy - cy)));
+          const xa = Math.max(x0, Math.ceil(cx - h)), xb = Math.min(x1, Math.floor(cx + h) + 1); if (yy < y0 || yy >= y1 || xb <= xa) continue;
+          const o = (yy - y0) * (W + 1); n += P[o + xb - x0] - P[o + xa - x0]; a += xb - xa; }
+        return [n, a]; };
+      const score = (cx, cy) => { const [n1, a1] = disc(cx, cy, r1), [n2, a2] = disc(cx, cy, r2); return {s: n1 / Math.max(1, a1) - (n2 - n1) / Math.max(1, a2 - a1), fill: n1 / Math.max(1, a1)}; };
+      let best = {s: -9}, bx = c.x, by = c.y;
+      for (let dy = -SR; dy <= SR; dy += 3) for (let dx = -SR; dx <= SR; dx += 3){ const q = score(c.x + dx, c.y + dy); if (q.s > best.s){ best = q; bx = c.x + dx; by = c.y + dy; } }
+      for (let k = 0; k < 2; k++){ const cx0 = bx, cy0 = by; for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++){ if (!dx && !dy) continue; const q = score(cx0 + dx, cy0 + dy); if (q.s > best.s){ best = q; bx = cx0 + dx; by = cy0 + dy; } } }
+      if (best.fill >= 0.25){
+        // position sous-pixel : sommet de la parabole passant par les scores voisins
+        const sub = (a, b0, c2) => { const den = a - 2 * b0 + c2; return den < 0 ? Math.max(-0.5, Math.min(0.5, (a - c2) / (2 * den))) : 0; };
+        const s0 = best.s, ox = sub(score(bx - 1, by).s, s0, score(bx + 1, by).s), oy = sub(score(bx, by - 1).s, s0, score(bx, by + 1).s);
+        c = {x: bx + ox, y: by + oy}; const q = pass(c, 0.56 * D); res = {n: q.n, rows: q.rows, cols: q.cols}; R = 0.56 * D;
+      }
+    }
+  }
+  for (let it = 0; it < radii.length; it++){
+    R = radii[it] * D; const q = pass(c, R);
+    if (q.n < Math.max(6, 0.06 * Math.PI * R * R)){ res = null; break; }
+    c = {x: q.sx / q.n, y: q.sy / q.n}; res = q;
   }
   if (!res){ S.lostN++; if (S.lostN >= 8){ S.last = null; S.prev = null; } return null; }
   if (mask){ mask.data.fill(0); const R2 = R * R; for (let y = Math.max(0, Math.floor(c.y - R)); y < Math.min(ph, Math.ceil(c.y + R)); y++) for (let x = Math.max(0, Math.floor(c.x - R)); x < Math.min(pw, Math.ceil(c.x + R)); x++){
@@ -430,7 +478,8 @@ ov.addEventListener('pointerdown', ev => {
     // le point touché peut tomber sur une lettre ou un morceau isolé : on teste aussi des points voisins et on garde le plus grand morceau plausible
     for (const r of [0.03, 0.06, 0.1]) for (let k = 0; k < 8; k++){ const R = r * Math.min(pw, ph), qx = Math.round(px + R * Math.cos(k * Math.PI / 4)), qy = Math.round(py + R * Math.sin(k * Math.PI / 4));
       const c2 = blobAt(full.data, pw, ph, mt, qx, qy); if (c2 && (!b || c2.n > b.n) && Math.max(c2.ev, c2.eh) < 0.6 * Math.min(pw, ph) && Math.hypot(c2.x - px, c2.y - py) < 0.6 * Math.max(c2.ev, c2.eh)) b = c2; }
-    S.D = b ? Math.max(8, b.ev, b.eh) : null; O.Dvid = S.D ? S.D * S.vw / pw : null; saveO();
+    S.D = b ? Math.max(8, b.ev, b.eh) : null; O.Dvid = S.D ? S.D * S.vw / pw : null;
+    if (O.calMode === 'plate' && O.calDv && S.D && Math.abs(O.calDv / O.Dvid - 1) < 0.35){ O.Dvid = O.calDv; S.D = O.calDv * pw / S.vw; } saveO();
     S.last = b ? {x: b.x, y: b.y} : {x: px, y: py}; S.lastGood = S.last; S.prev = null; S.lostN = 0; S.blobR = S.D ? S.D / 2 : 4;
     const sw = `<span class="swatch" style="background:rgb(${O.target.rgb})"></span>`;
     const ar = b ? b.ev / b.eh : 1;
@@ -439,20 +488,45 @@ ov.addEventListener('pointerdown', ev => {
     else hint(`${sw}Couleur mémorisée. Vérifiez que le cercle bleu suit bien le disque ou la pastille. ${O.mPerPx ? 'Prêt : « Démarrer la série ».' : 'Calibrez : « Calibrer automatiquement » (le plus simple si vous suivez le disque entier) ou « Calibrer sur le disque ».'}`);
     S.stage = O.mPerPx ? 'rec' : 'calib'; steps(); return;
   }
-  if (S.stage === 'cal1'){ S.calPts = [{x: vx, y: vy}]; S.stage = 'cal2'; hint('Touchez maintenant le <b>bord bas</b> du disque.'); steps(); return; }
-  if (S.stage === 'cal2'){ S.calPts.push({x: vx, y: vy}); const dpx = Math.hypot(S.calPts[1].x - S.calPts[0].x, S.calPts[1].y - S.calPts[0].y);
-    if (dpx < 20){ hint('Les deux points sont trop proches : recommencez « Calibrer sur le disque ».'); S.stage = 'calib'; S.calPts = []; steps(); return; }
-    O.mPerPx = (num(O.diam) / 100) / dpx; O.calMode = 'plate'; saveO();
-    hint(`Calibré : disque de ${fmt(num(O.diam), 0)} cm = ${Math.round(dpx)} px. ${O.target ? 'Prêt : « Démarrer la série ».' : 'Ciblez la pastille.'}`);
-    S.stage = O.target ? 'rec' : 'pick'; setTimeout(() => { S.calPts = []; }, 2500); steps(); return; }
+  if (S.stage === 'cal1' || S.stage === 'cal2'){ ev.preventDefault(); try{ ov.setPointerCapture(ev.pointerId); }catch(e){} S.lp = {x: vx, y: vy}; drawLoupe(); }
 });
+/* calibration à la main avec loupe : on pose le doigt, on fait glisser jusqu'au bord exact du disque, on relâche */
+ov.addEventListener('pointermove', ev => { if (!S.lp) return; const r = ov.getBoundingClientRect();
+  S.lp = {x: Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)) * S.vw, y: Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height)) * S.vh}; drawLoupe(); });
+const endLoupe = () => { if (!S.lp) return; const p = S.lp; S.lp = null; $('#loupe').hidden = true; calPoint(p.x, p.y); };
+ov.addEventListener('pointerup', endLoupe); ov.addEventListener('pointercancel', () => { S.lp = null; $('#loupe').hidden = true; });
+function drawLoupe(){
+  const L = $('#loupe'), c = L.getContext('2d'), p = S.lp, Z = 5, half = L.width / 2 / Z; // 5× : 1 pixel vidéo = 5 pixels de loupe
+  L.hidden = false; L.classList.toggle('right', p.x < S.vw * 0.5 && p.y < S.vh * 0.35);
+  c.imageSmoothingEnabled = false; c.fillStyle = '#000'; c.fillRect(0, 0, L.width, L.height);
+  try{ c.drawImage(video, p.x - half, p.y - half, 2 * half, 2 * half, 0, 0, L.width, L.height); }catch(e){}
+  if (S.calPts.length){ const q = S.calPts[0]; c.fillStyle = '#f0a83a'; c.beginPath(); c.arc(L.width / 2 + (q.x - p.x) * Z, L.height / 2 + (q.y - p.y) * Z, 5, 0, 7); c.fill(); }
+  c.strokeStyle = '#f0a83a'; c.lineWidth = 2; c.beginPath(); c.moveTo(0, L.height / 2); c.lineTo(L.width, L.height / 2); c.moveTo(L.width / 2, 0); c.lineTo(L.width / 2, L.height); c.stroke();
+}
+function calPoint(vx, vy){
+  if (S.stage === 'cal1'){ S.calPts = [{x: vx, y: vy}]; S.stage = 'cal2'; hint('Bord haut posé. Faites de même pour le <b>bord bas</b> du disque, à la verticale du premier point.'); steps(); return; }
+  if (S.stage !== 'cal2') return;
+  S.calPts.push({x: vx, y: vy}); const dpx = Math.hypot(S.calPts[1].x - S.calPts[0].x, S.calPts[1].y - S.calPts[0].y);
+  if (dpx < 20){ hint('Les deux points sont trop proches : recommencez « Calibrer sur le disque ».'); S.stage = 'calib'; S.calPts = []; steps(); return; }
+  O.mPerPx = (num(O.diam) / 100) / dpx; O.calMode = 'plate'; O.calDv = dpx; O.calDh = dpx; O.calDvRaw = dpx; O.calV = 6;
+  // taille du disque vue par le suivi à ce moment : sert ensuite à corriger l'échelle si le téléphone est déplacé
+  // le suivi prend la taille exacte du disque ; on mesure ensuite la taille vue par le suivi (référence pour corriger l'échelle si le téléphone bouge)
+  if (O.Dvid && Math.abs(dpx / O.Dvid - 1) < 0.35){ O.Dvid = dpx; S.D = null; } // on suit bien le disque entier : le suivi prend sa taille exacte
+  O.calTrackPx = null; S.trackRef = []; saveO();
+  if (S.src === 'file' && video.paused) for (let i = 0; i < 15; i++) frame(video.currentTime);
+  hint(`Calibré à la main : disque de ${fmt(num(O.diam), 0)} cm = ${Math.round(dpx)} px. Le contour bleu doit épouser le bord du disque (affinez avec − / + si besoin). ${O.target ? 'Prêt : « Démarrer la série ».' : 'Ciblez la couleur du disque.'}`);
+  S.stage = O.target ? 'rec' : 'pick'; setTimeout(() => { S.calPts = []; }, 2500); steps();
+}
 function finishAutoCal(){
   const med = arr => { const a = [...arr].sort((x, y) => x - y); return a[Math.floor(a.length / 2)]; };
   if (S.isPlate){
-    const dv = med(S.areas.map(z => z.ext)), dh = med(S.areas.map(z => z.exth)); O.calDvRaw = dv; O.calDv = dv; O.calDh = dh; O.calV = 5; O.mPerPx = (num(O.diam) / 100) / dv; O.calMode = 'plate-auto';
-    O.Dvid = Math.max(dv, dh); S.D = null;
-    const tilt = dv / dh;
-    hint(`Calibré sur le disque suivi : ${fmt(num(O.diam), 0)} cm ≈ ${Math.round(dv)} px de haut. <b>Vérifiez que le contour bleu épouse le bord du disque</b> ; sinon ajustez-le avec − / +.${tilt < 0.93 ? ` Le disque apparaît ovale (${Math.round(tilt * 100)} %) : le téléphone n'est pas bien en face du disque ; placez-le à hauteur du disque et bien vertical.` : ''}`);
+    const dv = med(S.areas.map(z => z.ext)), dh = med(S.areas.map(z => z.exth)); O.calDvRaw = dv; O.calDv = dv; O.calDh = dh; O.calV = 6; O.calTrackPx = dv; O.mPerPx = (num(O.diam) / 100) / dv; O.calMode = 'plate-auto';
+    const ratio = dv / dh, round = ratio <= 1.06 && ratio >= 0.94;
+    // disque bien rond : le suivi ajuste ensuite un cercle de cette taille (comme après un calibrage à la main)
+    O.Dvid = round ? dv : Math.max(dv, dh); S.D = null; if (round){ O.calTrackPx = null; S.trackRef = []; }
+    hint(ratio > 1.06 || ratio < 0.94
+      ? `<b>Calibrage automatique douteux</b> : la zone détectée mesure ${Math.round(dh)} × ${Math.round(dv)} px alors qu'un disque est rond. Un autre objet de la même couleur touche sans doute le disque (disque derrière, montant, sol), ou une partie du disque est masquée. <b>Calibrez plutôt à la main avec la loupe</b> (« Calibrer sur le disque »).`
+      : `Calibré sur le disque suivi : ${fmt(num(O.diam), 0)} cm ≈ ${Math.round(dv)} px de haut. <b>Vérifiez que le contour bleu épouse le bord du disque</b> ; sinon ajustez-le avec − / +, ou calibrez à la main avec la loupe.`);
   } else {
     const dpx = med(S.areas.map(z => Math.max(z.ext, z.exth))); O.mPerPx = (num(O.mark) / 100) / dpx; O.calMode = 'marker'; O.calDv = null;
     hint(`Calibré sur la pastille : ${fmt(num(O.mark), 1)} cm ≈ ${fmt(dpx, 1)} px. Moins précis que le disque ; vérifiez l'amplitude obtenue sur une première rep.`);
@@ -460,7 +534,7 @@ function finishAutoCal(){
   saveO(); S.areas = []; S.stage = 'rec'; steps();
 }
 
-const adjust = f => { if (!O.calDv) return; O.calDv *= f; O.mPerPx = (num(O.diam) / 100) / O.calDv; saveO(); steps(); if (S.src === 'file' && video.paused) frame(video.currentTime); };
+const adjust = f => { if (!O.calDv) return; const synced = O.Dvid && Math.abs(O.Dvid / O.calDv - 1) < 0.02; O.calDv *= f; if (synced){ O.Dvid = O.calDv; S.D = null; } O.mPerPx = (num(O.diam) / 100) / O.calDv; saveO(); steps(); if (S.src === 'file' && video.paused) frame(video.currentTime); };
 $('#bAdjM').addEventListener('click', () => adjust(1 / 1.005)); $('#bAdjP').addEventListener('click', () => adjust(1.005));
 
 /* ---------- enregistrement ---------- */
@@ -490,16 +564,19 @@ async function startRec(){
 // v5 : en mode disque, l'échelle est recalculée à chaque série à partir de la taille du disque suivi
 // (médiane des hauteurs mesurées pendant la série) × l'ajustement −/+ de l'utilisateur. Plus de calibrage périmé possible.
 function setScale(){
-  const plate = S.isPlate && O.calMode !== 'plate' && O.calMode !== 'marker';
+  // échelle de calibrage × (taille du disque suivie au calibrage ÷ taille suivie pendant la série) :
+  // corrige un téléphone rapproché ou éloigné depuis le calibrage ; les biais de détection du bord s'annulent dans le rapport
+  const ref = O.calTrackPx || (O.calV === 5 && O.calMode === 'plate-auto' ? O.calDvRaw : null);
   const V = S.samples.filter(z => isFinite(z.e) && z.e > 0 && isFinite(z.y));
-  // de préférence les images où la barre est quasi immobile (pas de flou de bougé)
   const still = V.filter((z, i) => i > 0 && i < V.length - 1 && Math.abs(V[i + 1].y - V[i - 1].y) < 3);
   const E = (still.length >= 10 ? still : V).map(z => z.e).sort((a, b) => a - b);
-  if (!plate || E.length < 5){ S.scale = null; return O.mPerPx; }
-  const dv = E[Math.floor(E.length / 2)], k = (O.calV === 5 && O.calDvRaw && O.calDv) ? O.calDv / O.calDvRaw : 1, mpp = (num(O.diam) / 100) / (dv * k);
-  S.scale = {dv, k, mpp, stored: O.mPerPx}; return mpp;
+  if (!O.mPerPx || !ref || !S.isPlate || O.calMode === 'marker' || E.length < 5){ S.scale = null; return O.mPerPx; }
+  // petits écarts (< 8 %) = bruit de mesure de la taille (flou, disque voisin...) : on garde l'échelle du calibrage
+  const dv = E[Math.floor(E.length / 2)], r0 = ref / dv, r = Math.abs(r0 - 1) > 0.08 ? r0 : 1, mpp = O.mPerPx * r;
+  S.scale = {dv, ref, r, r0, mpp, stored: O.mPerPx, platePx: (num(O.diam) / 100) / mpp}; return mpp;
 }
 function stopRec(){
+  if (EMBED) setTimeout(() => { const n = S.res ? S.res.reps.length : 0; $('#bSend').textContent = n ? `Valider : ${n} rep${n > 1 ? 's' : ''} dans la séance` : 'Aucune rep détectée'; $('#bSend').disabled = !n; $('#res').scrollIntoView({behavior: 'smooth', block: 'start'}); }, 0);
   if (S.vidRec && S.vidRec.state !== 'inactive'){ try{ S.vidRec.stop(); }catch(e){} } S.vidRec = null;
   if (S.src === 'file'){ video.pause(); video.playbackRate = 1; try{ S.fileFrames = S.vq0 != null ? video.getVideoPlaybackQuality().totalVideoFrames - S.vq0 : null; }catch(e){ S.fileFrames = null; } }
   S.rec = false; const res = analyze(S.samples, setScale(), num(O.rom) / 100); S.res = res; beep(440, 0.2);
@@ -525,7 +602,7 @@ function analyze(raw, mpp, minRom, live){
   const P = []; let gap = [];
   for (const s of raw){
     if (isFinite(s.y)){ if (gap.length && P.length){ const a = P[P.length - 1]; const dt = s.t - a.t; if (dt < 0.2) gap.forEach(g => P.push({t: g.t, x: a.x + (s.x - a.x) * (g.t - a.t) / dt, y: a.y + (s.y - a.y) * (g.t - a.t) / dt, a: NaN, interp: true})); }
-      gap = []; P.push({t: s.t, x: s.x, y: s.y, a: s.a}); }
+      gap = []; P.push({t: s.t, x: s.x, y: s.y, a: s.a, e: s.e}); }
     else gap.push(s);
   }
   if (P.length < 5) return out;
@@ -533,7 +610,7 @@ function analyze(raw, mpp, minRom, live){
   const T = P.map(p => p.t), Y = P.map(p => (y0 - p.y) * mpp), X = P.map(p => (p.x - x0) * mpp);
   // 2. lissage (moyenne glissante centrée ±50 ms) puis vitesse par différence centrée, relissée ±40 ms
   const smooth = (A, h) => A.map((_, i) => { let s = 0, n = 0; for (let j = i; j >= 0 && T[i] - T[j] <= h; j--){ s += A[j]; n++; } for (let j = i + 1; j < A.length && T[j] - T[i] <= h; j++){ s += A[j]; n++; } return s / n; });
-  const Ys = smooth(Y, 0.05);
+  const Ys = smooth(Y, 0.035);
   const V0 = Ys.map((_, i) => { const a = Math.max(0, i - 1), b = Math.min(Ys.length - 1, i + 1); return T[b] > T[a] ? (Ys[b] - Ys[a]) / (T[b] - T[a]) : 0; });
   const V = smooth(V0, 0.04);
   // 3. extrema avec hystérésis = amplitude minimale (zigzag)
@@ -548,16 +625,22 @@ function analyze(raw, mpp, minRom, live){
   // 4. reps = montées min → max
   for (let e = 1; e < ext.length; e++){
     if (ext[e - 1].k !== 'min' || ext[e].k !== 'max') continue;
-    let a = ext[e - 1].i, b = ext[e].i;
-    // bornes affinées : début quand la vitesse dépasse 0,02 m/s, fin quand elle y repasse
-    while (a < b && V[a] < 0.02) a++; while (b > a && V[b] < 0.02) b--;
-    if (b <= a) continue;
-    const rom = Ys[b] - Ys[a], dur = T[b] - T[a]; if (rom < minRom * 0.9 || dur <= 0) continue;
-    let vp = 0, tp = T[a]; for (let i = a; i <= b; i++) if (V[i] > vp){ vp = V[i]; tp = T[i]; }
+    const a0 = ext[e - 1].i, b0 = ext[e].i; if (b0 <= a0) continue;
+    // v6 : bornes de la phase concentrique = passage à 3 % du pic de vitesse,
+    // interpolées entre deux images. Évite d'allonger la montée (pause en bas, lissage) et les marches d'une image à 30 i/s.
+    let p = a0; for (let i = a0; i <= b0; i++) if (V[i] > V[p]) p = i;
+    const th = 0.03 * V[p]; if (!(th > 0)) continue;
+    let a = p; while (a > a0 && V[a - 1] > th) a--;
+    let b = p; while (b < b0 && V[b + 1] > th) b++;
+    const tA = a > a0 && V[a] !== V[a - 1] ? T[a - 1] + (th - V[a - 1]) / (V[a] - V[a - 1]) * (T[a] - T[a - 1]) : T[a];
+    const tB = b < b0 && V[b] !== V[b + 1] ? T[b] + (V[b] - th) / (V[b] - V[b + 1]) * (T[b + 1] - T[b]) : T[b];
+    const yAt = tt => { let k = Math.max(1, Math.min(T.length - 1, a0)); while (k < T.length - 1 && T[k] < tt) k++; const u = T[k] > T[k - 1] ? (tt - T[k - 1]) / (T[k] - T[k - 1]) : 0; return Ys[k - 1] + (Ys[k] - Ys[k - 1]) * Math.max(0, Math.min(1, u)); };
+    const rom = yAt(tB) - yAt(tA), dur = tB - tA; if (rom < minRom * 0.9 || dur <= 0) continue;
+    let vp = 0, tp = T[a]; for (let i = a0; i <= b0; i++) if (V[i] > vp){ vp = V[i]; tp = T[i]; }
     // excentrique précédente
     let ecc = null; if (e >= 2 && ext[e - 2].k === 'max'){ let ea = ext[e - 2].i, eb = ext[e - 1].i; while (ea < eb && V[ea] > -0.02) ea++; while (eb > ea && V[eb] > -0.02) eb--; const er = Ys[ea] - Ys[eb], ed = T[eb] - T[ea]; if (ed > 0 && er > 0) ecc = {rom: er, dur: ed, mv: er / ed}; }
     const xs = X.slice(a, b + 1); const drift = Math.max(...xs) - Math.min(...xs);
-    out.reps.push({n: out.reps.length + 1, t0: T[a], t1: T[b], rom, dur, mcv: rom / dur, vpk: vp, tpk: tp - T[a], ecc, drift});
+    out.reps.push({n: out.reps.length + 1, t0: tA, t1: tB, rom, dur, mcv: rom / dur, vpk: vp, tpk: tp - tA, ecc, drift, ia: a, ib: b});
   }
   // écarter la sortie / le retour au rack : déplacement surtout horizontal, ou amplitude bien plus courte que les autres reps
   out.excluded = [];
@@ -572,7 +655,13 @@ function analyze(raw, mpp, minRom, live){
   // qualité
   const dur = raw.length > 1 ? raw[raw.length - 1].t - raw[0].t : 0; const lost = raw.filter(s => !isFinite(s.y)).length;
   const A = raw.map(s => isFinite(s.e) && s.e > 0 ? s.e * s.e : s.a).filter(isFinite).sort((a, b) => a - b); const q = p => A.length ? A[Math.floor(p * (A.length - 1))] : NaN;
-  out.quality = {fps: dur > 0 ? (raw.length - 1) / dur : 0, lostPct: raw.length ? lost / raw.length * 100 : 0, sizeVar: A.length ? (Math.sqrt(q(0.9)) - Math.sqrt(q(0.1))) / Math.sqrt(q(0.5)) * 100 : 0, dur};
+  // distance barre–téléphone : taille du disque en bas vs en haut du mouvement (images immobiles)
+  let depth = null;
+  if (out.reps.length){ const tA = out.reps[0].t0 - 0.5, tB = out.reps[out.reps.length - 1].t1 + 0.5, idx = [];
+    for (let i = 0; i < P.length; i++) if (T[i] >= tA && T[i] <= tB && Math.abs(V[i]) < 0.05 && isFinite(P[i].e) && P[i].e > 0) idx.push(i);
+    if (idx.length >= 12){ idx.sort((i, j) => Ys[i] - Ys[j]); const q = Math.max(3, Math.floor(idx.length / 4)), md = a => { const b = a.map(i => P[i].e).sort((x, y) => x - y); return b[Math.floor(b.length / 2)]; };
+      depth = (md(idx.slice(0, q)) / md(idx.slice(-q)) - 1) * 100; } }
+  out.quality = {depth, fps: dur > 0 ? (raw.length - 1) / dur : 0, lostPct: raw.length ? lost / raw.length * 100 : 0, sizeVar: A.length ? (Math.sqrt(q(0.9)) - Math.sqrt(q(0.1))) / Math.sqrt(q(0.5)) * 100 : 0, dur};
   if (!live) out.series = {T, Y: Ys, V, X};
   return out;
 }
@@ -584,10 +673,10 @@ function showResults(res){
   const warns = [];
   if (q.fps && q.fps < 25) warns.push(`Seulement ${Math.round(q.fps)} images/s : vitesses maximales peu fiables.`);
   if (q.lostPct > 10) warns.push(`Cible perdue sur ${Math.round(q.lostPct)} % des images : améliorez l'éclairage ou la tolérance couleur.`);
-  if (q.sizeVar > 15) warns.push(`La taille apparente de la cible a varié de ${Math.round(q.sizeVar)} % : la barre s'est probablement rapprochée ou éloignée du téléphone, les mesures sont faussées.`);
+  if (q.depth != null && Math.abs(q.depth) > 5) warns.push(`Le disque paraît ${q.depth > 0 ? 'plus grand' : 'plus petit'} de ${Math.round(Math.abs(q.depth))} % en bas qu'en haut du mouvement : la barre ne reste pas à la même distance du téléphone (ou le téléphone n'est pas face au disque). Vitesses faussées d'autant.`);
   if (S.src === 'file' && S.fileFrames && S.samples.length < 0.9 * S.fileFrames) warns.push(`${S.samples.length} images analysées sur ${S.fileFrames} décodées : des images ont été sautées. Relancez l'analyse avec une lecture plus lente (Réglages › Vitesse de lecture).`);
   const excl = (res.excluded || []).map(r => `Mouvement à ${fmt(r.t0, 1)} s non compté (${fmt(r.rom * 100, 0)} cm) : ${r.why}.`);
-  $('#quality').innerHTML = `<p class="note">${fmt(q.dur, 1)} s enregistrées · ${Math.round(q.fps)} images/s · cible suivie sur ${Math.round(100 - q.lostPct)} % des images.</p>` + (S.scale ? `<p class="note">Échelle de la série : disque de ${fmt(num(O.diam), 0)} cm ≈ ${Math.round(S.scale.dv * S.scale.k)} px (mesuré sur cette série${S.scale.k !== 1 ? ', ajustement ' + (S.scale.k > 1 ? '+' : '') + fmt((S.scale.k - 1) * 100, 1) + ' %' : ''}).</p>` : '') + excl.map(w => `<p class="note">${esc(w)}</p>`).join('') + warns.map(w => `<p class="warn">${esc(w)}</p>`).join('');
+  $('#quality').innerHTML = `<p class="note">${fmt(q.dur, 1)} s enregistrées · ${Math.round(q.fps)} images/s · cible suivie sur ${Math.round(100 - q.lostPct)} % des images.</p>` + (S.scale ? `<p class="${Math.abs(S.scale.r - 1) > 0.08 ? 'warn' : 'note'}">Échelle de la série : disque de ${fmt(num(O.diam), 0)} cm = ${Math.round(S.scale.platePx)} px${S.scale.r !== 1 ? ` (le disque paraît ${S.scale.r < 1 ? 'plus grand' : 'plus petit'} de ${fmt(Math.abs(1 / S.scale.r - 1) * 100, 0)} % qu'au calibrage : téléphone ${S.scale.r < 1 ? 'rapproché' : 'éloigné'}, échelle corrigée${Math.abs(S.scale.r - 1) > 0.08 ? ' ; en cas de doute, recalibrez' : ''})` : ''}.</p>` : '') + excl.map(w => `<p class="note">${esc(w)}</p>`).join('') + warns.map(w => `<p class="warn">${esc(w)}</p>`).join('');
   const best = R.length ? Math.max(...R.map(r => r.mcv)) : 0;
   $('#tReps').innerHTML = R.length ? `<thead><tr><th>Rep</th><th>Ampl. cm</th><th>V moy m/s</th><th>V max m/s</th><th>Montée s</th><th>Perte</th></tr></thead><tbody>${R.map(r => `<tr class="${r.mcv === best ? 'best' : ''}"><td>${r.n}</td><td>${fmt(r.rom * 100, 1)}</td><td>${fmt(r.mcv)}</td><td>${fmt(r.vpk)}</td><td>${fmt(r.dur)}</td><td>${best ? Math.round((best - r.mcv) / best * 100) + ' %' : ''}</td></tr>`).join('')}</tbody>` : '';
   drawV(R); drawP(res); renderRef();
@@ -659,7 +748,7 @@ function trialJSON(){
     video: {width: S.vw, height: S.vh, camera_fps_setting: set.frameRate || null},
     exercise: $('#sEx').value.trim(), load_kg: $('#sLoad').value.trim(), comment: $('#sNote').value.trim(),
     settings: {obj: O.obj, diam_cm: num(O.diam), marker_cm: num(O.mark), min_rom_cm: num(O.rom), tol_hue: +O.tol, analysis_width_px: +O.res, file_rate: +O.fileRate || 0.5},
-    target: O.target, calibration: {mode: O.calMode, m_per_px: S.scale ? S.scale.mpp : O.mPerPx, m_per_px_calibrage: O.mPerPx, echelle_serie: S.scale ? {plate_px_mediane: S.scale.dv, ajustement: S.scale.k} : null, plate_px_v: O.calDv || null, plate_px_v_auto: O.calDvRaw || null, plate_px_h: O.calDh || null, target_px: O.Dvid || null},
+    target: O.target, calibration: {mode: O.calMode, m_per_px: S.scale ? S.scale.mpp : O.mPerPx, m_per_px_calibrage: O.mPerPx, echelle_serie: S.scale ? {plate_px_suivi_serie: S.scale.dv, plate_px_suivi_calibrage: S.scale.ref, correction: S.scale.r, plate_px_echelle: S.scale.platePx} : null, calibrage_suivi_px: O.calTrackPx || null, plate_px_v: O.calDv || null, plate_px_v_auto: O.calDvRaw || null, plate_px_h: O.calDh || null, target_px: O.Dvid || null},
     samples: S.samples.map(p => [Math.round(p.t * 1e4) / 1e4, isFinite(p.x) ? Math.round(p.x * 10) / 10 : null, isFinite(p.y) ? Math.round(p.y * 10) / 10 : null, isFinite(p.a) ? Math.round(p.a) : null, isFinite(p.e) ? Math.round(p.e * 10) / 10 : null, isFinite(p.h) ? Math.round(p.h * 10) / 10 : null]),
     samples_columns: ['t_s', 'x_px', 'y_px', 'aire_px2', 'hauteur_cible_px', 'largeur_cible_px'],
     results: {reps: (res.reps || []).map(r => ({n: r.n, t0: r.t0, t1: r.t1, rom_m: r.rom, mcv: r.mcv, vpk: r.vpk, t_pic_s: r.tpk, dur_s: r.dur, ecc: r.ecc, drift_m: r.drift})),
@@ -700,7 +789,7 @@ video.addEventListener('ended', () => { if (S.src === 'file' && S.rec) stopRec()
 /* ---------- liaisons ---------- */
 $('#bCam').addEventListener('click', () => S.stream ? stopCam() : startCam());
 $('#bPick').addEventListener('click', () => { S.stage = 'pick'; S.last = null; S.prev = null; hint('Touchez la <b>pastille</b> sur l\'image.'); steps(); });
-$('#bCal').addEventListener('click', () => { S.stage = 'cal1'; S.calPts = []; hint(`Touchez le <b>bord haut</b> du disque (diamètre réglé : ${fmt(num(O.diam), 0)} cm, modifiable dans les réglages).`); steps(); });
+$('#bCal').addEventListener('click', () => { S.stage = 'cal1'; S.calPts = []; hint(`Posez le doigt près du <b>bord haut</b> du disque : une loupe apparaît. Faites glisser jusqu'à ce que la croix soit exactement sur le bord, puis relâchez. (Disque de ${fmt(num(O.diam), 0)} cm, modifiable dans les réglages.)${S.src === 'cam' ? ' Barre immobile pendant le calibrage.' : ''}`); steps(); });
 $('#bCalAuto').addEventListener('click', () => { S.stage = 'calauto'; S.areas = [];
   if (S.src === 'file' && video.paused){ for (let i = 0; i < 20 && S.stage === 'calauto'; i++) frame(video.currentTime); return; } hint(S.isPlate ? `Mesure du disque suivi (${fmt(num(O.diam), 0)} cm) : barre immobile une seconde, <b>disque entièrement visible</b> (pas masqué par un montant du rack ni par le corps)…` : `Mesure de la pastille (${fmt(num(O.mark), 1)} cm) : gardez la barre immobile une seconde…`); steps(); });
 $('#bRec').addEventListener('click', () => { if (S.rec) stopRec(); else startRec(); });
@@ -728,8 +817,25 @@ try{ $('#sEx').value = localStorage.getItem(LS + '-ex') || ''; }catch(e){}
 document.addEventListener('visibilitychange', async () => { if (document.visibilityState === 'visible' && S.stream && !S.wake){ try{ S.wake = await navigator.wakeLock.request('screen'); }catch(e){} } else if (document.visibilityState === 'hidden') S.wake = null; });
 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ hint('Ce navigateur ne donne pas accès à la caméra. Ouvrez l\'appli en https dans Safari (iPhone) ou Chrome (Android).'); $('#bCam').disabled = true; }
 renderHist(); steps();
-window.__vb = {analyze, S, O, trialJSON}; // accès pour les tests
-if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});
+window.__vb = {analyze, S, O, trialJSON, stopCam}; // accès pour les tests et pour l'appli hôte
+/* ---------- mode intégré (ouvert depuis Planif Muscu : vbt.html?embed=1&ex=…&kg=…&key=…) ---------- */
+if (EMBED){
+  document.body.classList.add('embed'); $('#bClose').hidden = false; $('#bSend').hidden = false; $('#bSend').disabled = true;
+  const ex = QS.get('ex') || '', kg = QS.get('kg') || '', set = QS.get('set') || '';
+  if (ex || kg){ $('#ctx').hidden = false; $('#ctx').textContent = [ex, set && 'série ' + set, kg && kg + ' kg'].filter(Boolean).join(' · '); }
+  $('#sEx').value = ex; $('#sLoad').value = kg;
+  const post = m => { try{ parent.postMessage(m, location.origin); }catch(e){} };
+  $('#bClose').addEventListener('click', () => { if (S.rec) stopRec(); stopCam(); post({type: 'vbt-close'}); });
+  $('#bSend').addEventListener('click', () => {
+    if (!S.res || !S.res.reps.length) return;
+    const r3 = v => v == null || !isFinite(v) ? null : Math.round(v * 1000) / 1000;
+    post({type: 'vbt-set', key: QS.get('key') || '', reps: S.res.reps.map(r => ({mcv: r3(r.mcv), vpk: r3(r.vpk), rom: r3(r.rom), dur: r3(r.dur)})), vl: S.res.vl, q: S.res.quality});
+    stopCam();
+  });
+  window.addEventListener('pagehide', () => { try{ stopCam(); }catch(e){} });
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) startCam();
+}
+if (!EMBED && 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
 </script>
 </body>

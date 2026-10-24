@@ -108,5 +108,25 @@ Résultats (vidéos réimportées, calibrage automatique, sans ajustement manuel
 - Essai 17:21 (réf 0,80 / 0,86 / 0,78 / 0,72) : biais moyen −3,6 %.
 - Squat synthétique : écarts −3,8 à +2,4 %.
 
+## Version 6 : calibrage à la loupe et suivi par ajustement de cercle (24/10)
+
+Essai 11:20 (développé couché, Tendo) : écarts de −10 à −40 %. Trois causes trouvées :
+1. **Un autre disque vert touchait le disque suivi** (le disque de l'autre côté de la barre, vu en perspective). Le calibrage automatique a mesuré 231 px de haut au lieu de 203 : vitesses −11 %.
+2. **Ce disque voisin tirait aussi le centre** : il bouge moins (plus loin de la caméra), donc l'amplitude mesurée était trop courte.
+3. **Bornes de la montée** : une pause en bas comptait dans la durée de la rep (rep 2 : 0,17 m/s au lieu de 0,88).
+
+Corrections :
+- **Calibrage à la main avec loupe ×5** : poser le doigt près du bord, glisser jusqu'au bord exact, relâcher.
+- **Suivi par ajustement de cercle** quand la taille du disque est connue (calibrage à la main, ou calibrage automatique si le disque est bien rond) : on cherche le cercle de ce diamètre plein de couleur à l'intérieur et vide juste à l'extérieur, position au sous-pixel. Un disque voisin ne peut plus déplacer le centre.
+- **Calibrage automatique contrôlé** : si la zone n'est pas ronde (écart > 6 % entre hauteur et largeur), l'appli dit de calibrer à la main.
+- **Bornes de la montée** : vitesse à 3 % du pic, interpolées entre deux images.
+- **Échelle** : celle du calibrage, corrigée seulement si le disque paraît > 8 % plus grand ou plus petit (téléphone déplacé).
+- **Alerte de taille** remplacée : on compare la taille du disque en bas et en haut du mouvement (vraie variation de distance), au lieu de la variation image par image (flou de bougé, reflets), qui déclenchait des alertes à tort.
+
+Résultats (vidéos réimportées) :
+- Essai 11:20, calibrage à la loupe : biais +3,0 %, 8 reps sur 10 à ±4 % (rep à 0,44 m/s : +11 %).
+- Essai 18:07 (manuel ou automatique) : +4,1 / +2,5 / +2,8 / −4,5 %.
+- Squat synthétique : −2,7 à −6,5 % (les pauses parfaitement immobiles de la vidéo synthétique allongent un peu la montée).
+
 ## Mise à jour
-Remplacer `index.html`, puis augmenter le numéro de version dans `sw.js` (`vitesse-barre-v5` → `v6`…).
+Remplacer `index.html`, puis augmenter le numéro de version dans `sw.js` (`vitesse-barre-v6` → `v7`…).
